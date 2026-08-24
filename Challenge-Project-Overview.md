@@ -1,45 +1,8 @@
----
-
-> ## Challenge Advisor: Update & Finalize Your Project Overview
->
-> > 💡 **These grey text instructions are just for you, the team's Challenge Advisor; please delete them once you have completed the steps below.**
->
-> We've pre-populated this Challenge Project Overview page — which is what will be shared with your Break Through Tech student team in August — using the details from your submission form. You should have received an email inviting you to join this repo as a Collaborator, enabling you to add files and make edits.
-> 
-> In order for your project to be finalized and assigned to a team, please:
-> 1. **Review all sections below** and update or expand any content as needed, making sure to address the SME Feedback in the section immediately below. Look for square brackets to find the places below that require additional inputs from you (e.g., "About [Company / Org Name]").
-> 2. **Add your dataset** to the [data folder](data) in this repo.
-> 3. **Close the Issue assigned to you in this repo** to let us know that you have made your edits and the overview page is ready for final review. You can do this by going to the _Issues_ tab in the top left section of the menu above, add a comment that says "CA review complete", and click the button to Close the Issue. 
->
-> If you're unfamiliar with how to edit a page like this in GitHub, check out [this tutorial](https://ubc-lib-geo.github.io/gis-workshop-waml-template/content/handson/edit-readme.html) for a quick overview (start with step 2 and only edit this page), and [this guide](https://ubc-lib-geo.github.io/gis-workshop-waml-template/content/markdown.html) on how to use Markdown to compose text.
->
->
-> ❌ Remember that this is a public repo. Do NOT include: Proprietary data, PII, API keys, credentials, or anything confidential.
-
----
-
-## 📋 BTT Internal Evaluation Notes
-*(This section is for BTT staff and CAs only — remove before sharing with students)*
-
-| Check   | Status | Notes                                                                   |
-|---------|--------|-------------------------------------------------------------------------|
-| Python Compatibility | 🟢 | The tech stack includes Python for the migration and validation, making it compatible for student use. |
-| Data Readiness | 🟢  | Data is small, under 1GB, making it manageable for students without extensive cleaning. |
-| Resource Check | 🟢  | Only uses free-tier tools like Google Colab, accessible for all students. |
-
-**Student Fit Score:** 7/10  
-**Technical Depth Score:** 8/10  
-**Overall Recommendation:** REVISE
-
-**Advisor Feedback Draft:**
-The project presents a strong integration of practical industry challenges with technical skills applicable in real-world scenarios. However, consider simplifying aspects of the LLM integration to ensure students can effectively learn and complete the project within the timeframe. Additionally, reinforce SAS training for students less familiar with it before starting these integrations. Ensure students feel supported on both legacy understanding and Python migration techniques.
-
----
-
 # AI-Powered SAS Migration
 
 **Company / Org:** Abt Global  
-**Challenge Advisor:** Parker Malek, [Email address]  
+**Challenge Advisor:** Parker Malek, parker_malek@yahoo.com    
+**AI Studio Coach:** Ananya Devarakonda, ananya.devarakonda@breakthroughtech.org     
 **Program:** Break Through Tech AI Studio - Fall 2026
 
 ---
@@ -54,6 +17,14 @@ Abt Global is a leader in research, technical assistance, and evaluation in the 
 
 ### Project Summary
 In this project, you will use SAS datasets and legacy SAS programs and large language model (LLM)-based agentic AI techniques to translate SAS code into Python, validate outputs, and generate documentation of data processing workflows. This will help our company address the challenge of efficiently migrating legacy SAS systems to modern, scalable Python-based data pipelines while reducing manual effort and errors.
+
+This project was proposed as part of the Breakthrough Tech AI Program to explore how Agentic AI and Large Language Models (LLMs) can be used to modernize legacy analytics workflows.
+
+The objective is to build a system that automates the migration of SAS data processing pipelines to Python. The solution will translate SAS programs into Python, validate that the translated code produces equivalent results, identify discrepancies, and generate documentation describing the underlying data processing logic. The project will be evaluated using a real-world SAS pipeline consisting of four interdependent programs, including macro-based processing and analytical algorithms.
+
+Many organizations continue to rely on SAS softwares which are costly. Migrating these systems to Python often requires significant manual effort for code translation, testing, validation, and documentation. This project explores how Agentic AI can help automate portions of that workflow while maintaining accuracy and transparency.
+
+A successful solution could provide a reusable framework for migrating legacy SAS workflows, reducing modernization effort, preserving valuable business knowledge, and helping organizations transition to more accessible and scalable Python-based analytics platforms.
 
 ### Success Criteria
 Success for this project will be measured through a combination of accuracy, completeness, and usability of the end-to-end migration system. A successful project will deliver a functional, end-to-end prototype that can reliably migrate a SAS data pipeline to Python, validate the results, and clearly explain the transformation process.
@@ -86,7 +57,40 @@ Use these milestones to guide your work. Your team will create a **GitHub Projec
 - Numerical and text data stored in SAS format, including legacy programs and datasets. 
 - The public data source is available at: https://qualitynet.cms.gov/inpatient/public-reporting/overall-ratings/software
 - No known limitations or preprocessing needed at this time.
-- [Link to data dictionary or documentation, if available]
+  
+### Data Exploration :
+  
+Overall Hospital Quality Star Rating Statistical Analysis System SAS package is used to produce the 
+Centers for Medicare & Medicaid Services’ (CMS’s) Overall Hospital Quality Star Rating 
+published to Care Compare on Medicare.gov This SAS Pack comprises three main SAS programs and 
+one macro file to provide a specified quarter’s group scores, summary scores, and 
+star ratings using a simple average of measure scores into group scores, 
+a weighted average of group scores into a summary score, and k-means clustering.
+
+The SAS programs and log files can be read by any text reader. SAS datasets can only be opened in SAS environment, or 
+can be imported in python using python packages. Since it won't be possible to run the SAS programs outside of SAS 
+environment, we have provided all the input and output SAS data files in CSV format along with the SAS log file and HTML
+with print out from SAS procedures.
+
+- SAS Programs for migrating to python
+   - 0 – Data and Measure Standardization_2025Jul.sas
+   - 1 – First Stage_Simple Average of Measure Scores_2025Jul.sas
+   - 2 – Second Stage Weighted Average and Categorize Star_2025Jul.sas
+   - Star_Macros.sas
+- Input data sets
+   - alldata_2025jul.csv
+   - alldata_2025jul.sas7bdat
+- SAS Program Log File
+  - SAS_Log.log
+
+- Output Datasets
+  - SAS Output data files
+     - less100_measure.sas7bdat, measure_average_stddev_2025jul.sas7bdat, national_average_2025jul.sas7bdat,
+      outcome_mortality.sas7bdat, outcome_readmission.sas7bdat, outcome_safety.sas7bdat, process.sas7bdat
+      ptexp.sas7bdat, star_2025jul.sas7bdat, std_data_2025jul_analysis.sas7bdat
+  - CSV Output data files
+      - less100_measure.csv, measure_average_stddev_2025jul.csv, national_average_2025jul.csv, outcome_mortality.csv
+        outcome_readmission.csv, outcome_safety.csv, process.csv, ptexp.csv, star_2025jul.csv, std_data_2025jul_analysis.csv
 
 ---
 
@@ -96,33 +100,57 @@ Use these milestones to guide your work. Your team will create a **GitHub Projec
 - Natural Language Processing (NLP)
 - Large Language Models (LLMs)/ Generative AI
 - Agentic AI / Workflow AutomationCode Translation and Validation
+  
+**Recommended Libraries:**  
+     pandas, scikit-learn, pyreadstat, numpy, scipy, statsmodels, pytest, datacompy, langchain/langgrapgh, pydantic, streamlit, Docker, markdown
+  
+ **Models and Techniques:**   
+   - Pre-trained Large Language Models (LLMs) for code understanding, code generation, and documentation.     
+   - Agent-based workflow orchestration to coordinate translation, validation, debugging, and documentation tasks.     
+   - Rule-based and programmatic validation techniques to compare SAS and Python outputs.  
 
-**Recommended Libraries:**
-- [e.g., pandas, scikit-learn, TensorFlow, Hugging Face]
+**Input Features:**  
+   - SAS source code, including DATA steps, PROC SQL statements, and macro logic.  
+   - Input datasets and intermediate outputs generated throughout the SAS pipeline.  
+   - Validation metrics such as row counts, column statistics, and aggregate measures.  
 
 **Evaluation Metrics:**
 - Accuracy, Completeness, Usability
+- Compare translated Python outputs against SAS-generated outputs (ground truth).
+- Measure correctness using:
+
+   - Row count agreement      
+    
+   - Column-level value comparisons        
+    
+   - Aggregate statistic comparisons   
+        
+   - Successful execution of the end-to-end pipeline
+
+- Evaluate the quality of generated documentation by verifying that it accurately describes the underlying data processing workflow.
 
 ---
 
 ## 📚 Resources to Get Started
 
-The following resources will help your team understand the problem space and potential technical approaches for this project:
+The primary resources for this project are the provided SAS programs, datasets, logs, and reference outputs. These should be reviewed first so that the team understands the existing SAS workflow before designing the migration system.
 
 **Background Reading:**
-- [e.g., Link to an article or blog post about the problem domain]
-- [e.g., Link to an industry report or case study]
+Teams may find it useful to review documentation and tutorials covering:
+  - SAS DATA step concepts
+	- SAS PROC SQL
+	- SAS macros and macro variables
+	- Reading SAS datasets with Python
+	- pandas data manipulation
+	- scikit-learn clustering, particularly k-means
+	- LLM-based code generation and translation
+	- Agentic AI workflow design
+	- Automated software testing and data validation
+  - LLM-generated technical documentation
 
-**Technical Tutorials:**
-- [e.g., Link to a free tutorial on the ML technique(s) involved]
-- [e.g., Link to documentation for a key library or tool]
-
-**Code Examples:**
-- [e.g., Link to a relevant GitHub repo]
-- [e.g., Link to a sample implementation or starter code]
-
-**Other:**
-- [Links to any additional resources — e.g., papers, videos, podcasts, etc.]
+Get started with SAS:
+- SAS OnDemand for Academics (free) [main link](https://welcome.oda.sas.com/), [setup tutorial](https://support.sas.com/en/software/ondemand-for-academics-support.html)
+- Python Pandas vs SAS [reference](https://pandas.pydata.org/docs/getting_started/comparison/comparison_with_sas.html)
 
 *Feel free to explore beyond these, and share anything interesting you find with me!*
 
@@ -132,17 +160,19 @@ The following resources will help your team understand the problem space and pot
 
 **Official check-ins:** During our biweekly 45-minute AI Studio Lab Section meeting block (2nd and 4th week of every month)
 
+During these meetings, we can:
+	• Review the team’s progress against project milestones.
+	• Discuss technical questions or blockers.
+	• Review design and architecture decisions.
+	• Discuss validation results and discrepancies.
+	• Prioritize next steps.
+
  **Other ways to reach out to me with questions:** 
-* [e.g., Your team's channel within Break Through Tech’s Discord space]
-* [e.g., Email; please copy your teammates and AI Studio Coach]
-* [e.g., Request a team check-in on Zoom]
-* [Note: I will aim to respond within 48 hours. Please reach out to your AI Studio Coach with urgent questions.]
+Outside of the official check-ins, please use the team’s designated Break Through Tech communication channel for project-related questions.
+When asking technical questions, please include enough context for me to understand the issue—for example, the relevant SAS/Python code, error message, validation result, or GitHub issue.
+For questions that affect the whole team, please use a shared communication channel rather than individual messages whenever possible so that everyone has access to the same information.
+I will aim to respond to project-related questions within 48 hours when possible. For urgent program-related questions or issues requiring immediate attention, please reach out to your AI Studio Coach.
 
-> 💡 **Challenge Advisor: Please update the above based on your availability and preference. If you are not able to answer questions or meet with fellows outside of the biweekly Lab Section check-ins, simply write in "N/A (only available during the official check-in times)"**
-
-**Recommended free coding / collaboration tools**
-* […]
-* […]
 
 ---
 
