@@ -1,15 +1,9 @@
 # AI-Powered SAS Migration
 
-**Company / Org:** Abt Global  
+**Company / Org:** Independent Challenge Advisor 
 **Challenge Advisor:** Parker Malek, parker_malek@yahoo.com    
 **AI Studio Coach:** Ananya Devarakonda, ananya.devarakonda@breakthroughtech.org     
 **Program:** Break Through Tech AI Studio - Fall 2026
-
----
-
-## 🏢 About Abt Global
-
-Abt Global is a leader in research, technical assistance, and evaluation in the fields of public health, education, and international development. We aim to improve the lives of people around the world through data-driven insights and innovative solutions.
 
 ---
 
@@ -18,7 +12,7 @@ Abt Global is a leader in research, technical assistance, and evaluation in the 
 ### Project Summary
 In this project, you will use SAS datasets and legacy SAS programs and large language model (LLM)-based agentic AI techniques to translate SAS code into Python, validate outputs, and generate documentation of data processing workflows. This will help our company address the challenge of efficiently migrating legacy SAS systems to modern, scalable Python-based data pipelines while reducing manual effort and errors.
 
-This project was proposed as part of the Breakthrough Tech AI Program to explore how Agentic AI and Large Language Models (LLMs) can be used to modernize legacy analytics workflows.
+This project was proposed as part of the Break Through Tech AI Program to explore how Agentic AI and Large Language Models (LLMs) can be used to modernize legacy analytics workflows.
 
 The objective is to build a system that automates the migration of SAS data processing pipelines to Python. The solution will translate SAS programs into Python, validate that the translated code produces equivalent results, identify discrepancies, and generate documentation describing the underlying data processing logic. The project will be evaluated using a real-world SAS pipeline consisting of four interdependent programs, including macro-based processing and analytical algorithms.
 
