@@ -13,7 +13,7 @@
 | Hao Li.          | @becomingWise |             |
 | Lizzette Rivera  | @             |             |
 | Pawanjit Birdi   | @             |             |
-| Miguel Garcia    | @             |             |
+| Miguel Garcia    | @miguelagarcia-dev|             |
 | Shane Salvador   | @             |             |
 
 ---
