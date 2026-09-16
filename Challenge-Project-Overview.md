@@ -131,9 +131,9 @@ The primary resources for this project are the provided SAS programs, datasets, 
 
 **Technical Tutorials: Intro to SAS**
 
-- [learning modules](https://stats.oarc.ucla.edu/sas/modules/)
-- [technical documentation](https://support.sas.com/en/documentation.html)
-- [clustering documentation](https://communities.sas.com/t5/SAS-Communities-Library/Tip-K-means-clustering-in-SAS-comparing-PROC-FASTCLUS-and-PROC/ta-p/221369)
+- [Learning Modules](https://stats.oarc.ucla.edu/sas/modules/)
+- [Technical Documentation](https://support.sas.com/en/documentation.html)
+- [Clustering Documentation](https://communities.sas.com/t5/SAS-Communities-Library/Tip-K-means-clustering-in-SAS-comparing-PROC-FASTCLUS-and-PROC/ta-p/221369)
 
 **Background Reading:**
 Teams may find it useful to review documentation and tutorials covering:
