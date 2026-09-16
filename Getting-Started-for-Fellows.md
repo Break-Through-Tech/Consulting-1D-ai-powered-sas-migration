@@ -6,7 +6,7 @@ This repo is your team's workspace for Fall 2026 AI Studio. Everything you work 
 
 If you're not familiar with how GitHub works, or need a refresher, you can find helpful documentation [here](https://docs.github.com/en/get-started).
 
-To start adding project tasks aligned with your Challenge Project's monthly milestones, use the Projects tab [here]([https://github.com/Break-Through-Tech/fall-ai-studio-2026-challenge-project-template-repo/projects](https://github.com/Break-Through-Tech/Consulting-1D-ai-powered-sas-migration/issues)
+To start adding project tasks aligned with your Challenge Project's monthly milestones, use the Projects tab [here](https://github.com/Break-Through-Tech/Consulting-1D-ai-powered-sas-migration/issues)
 
 > 💡 **Note:** You can delete this file once your team is up and running; it's just here to help you get oriented. 
 
