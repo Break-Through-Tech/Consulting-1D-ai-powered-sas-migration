@@ -129,6 +129,12 @@ with print out from SAS procedures.
 
 The primary resources for this project are the provided SAS programs, datasets, logs, and reference outputs. These should be reviewed first so that the team understands the existing SAS workflow before designing the migration system.
 
+**Technical Tutorials: Intro to SAS**
+
+	- https://stats.oarc.ucla.edu/sas/modules/
+	- https://support.sas.com/en/documentation.html
+	- https://communities.sas.com/t5/SAS-Communities-Library/Tip-K-means-clustering-in-SAS-comparing-PROC-FASTCLUS-and-PROC/ta-p/221369
+
 **Background Reading:**
 Teams may find it useful to review documentation and tutorials covering:
   - SAS DATA step concepts
