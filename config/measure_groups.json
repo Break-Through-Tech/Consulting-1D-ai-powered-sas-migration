@@ -1,0 +1,78 @@
+{
+  "OM": {
+    "label": "Mortality",
+    "measures": [
+      "std_MORT_30_AMI",
+      "std_MORT_30_CABG",
+      "std_MORT_30_COPD",
+      "std_MORT_30_HF",
+      "std_MORT_30_PN",
+      "std_MORT_30_STK",
+      "std_PSI_4_SURG_COMP"
+    ],
+    "output_table": "OUTCOME_MORTALITY"
+  },
+  "OS": {
+    "label": "Safety of Care",
+    "measures": [
+      "std_COMP_HIP_KNEE",
+      "std_HAI_1",
+      "std_HAI_2",
+      "std_HAI_3",
+      "std_HAI_4",
+      "std_HAI_5",
+      "std_HAI_6",
+      "std_PSI_90_SAFETY"
+    ],
+    "output_table": "OUTCOME_SAFETY"
+  },
+  "OR": {
+    "label": "Readmission",
+    "measures": [
+      "std_EDAC_30_AMI",
+      "std_EDAC_30_HF",
+      "std_EDAC_30_PN",
+      "std_OP_32",
+      "std_READM_30_CABG",
+      "std_READM_30_COPD",
+      "std_READM_30_HIP_KNEE",
+      "std_READM_30_HOSP_WIDE",
+      "std_OP_35_ADM",
+      "std_OP_35_ED",
+      "std_OP_36"
+    ],
+    "output_table": "OUTCOME_READMISSION"
+  },
+  "PtExp": {
+    "label": "Patient Experience",
+    "measures": [
+      "std_H_COMP_1_STAR_RATING",
+      "std_H_COMP_2_STAR_RATING",
+      "std_H_COMP_3_STAR_RATING",
+      "std_H_COMP_5_STAR_RATING",
+      "std_H_COMP_6_STAR_RATING",
+      "std_H_COMP_7_STAR_RATING",
+      "std_H_GLOB_STAR_RATING",
+      "std_H_INDI_STAR_RATING"
+    ],
+    "output_table": "PTEXP"
+  },
+  "Process": {
+    "label": "Timely and Effective Care",
+    "measures": [
+      "std_HCP_COVID_19",
+      "std_IMM_3",
+      "std_OP_10",
+      "std_OP_13",
+      "std_OP_18B",
+      "std_OP_22",
+      "std_OP_23",
+      "std_OP_29",
+      "std_OP_8",
+      "std_PC_01",
+      "std_SAFE_USE_OF_OPIOIDS",
+      "std_SEP_1"
+    ],
+    "output_table": "PROCESS"
+  }
+}

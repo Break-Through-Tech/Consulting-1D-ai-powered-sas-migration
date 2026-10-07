@@ -1,0 +1,155 @@
+[
+  {
+    "id": "ctx_libs",
+    "title": "Input table and output library",
+    "sas_code": "%LET MEASURE_ANALYSIS=R.Std_data_&year.&quarter._analysis; /* derived final analysis file */",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 28,
+    "line_end": 28,
+    "inputs": [],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "R.Std_data_2025Jul_analysis"
+    },
+    "notes": "Context only, no logic. R. is the folder of SAS output CSVs; R.Std_data_2025Jul_analysis is STD_DATA_2025JUL_ANALYSIS.csv. Not translated on its own."
+  },
+  {
+    "id": "grp_score_macro",
+    "title": "Macro %grp_score (reusable group-score calculation)",
+    "sas_code": "%macro grp_score(indsn, gp, varlist,  nmeasure, Out_avg);\n\t\tdata dat0 (keep=provider_id &varlist.  c1-c&nmeasure. total_cnt measure_wt avg ); \n\t\t\tset &indsn.;\n\n\t\t\tarray M(1:&nmeasure.) &varlist.;\n\t\t\tarray C (1:&nmeasure.) C1-C&nmeasure.;\n\n\t        DO k =1 TO &nmeasure.;\n\t\t\tif m[k] ^=. then C[k]=1;\n\t   \t\telse C[k]=0;\n\t\t\tEND;\n\t\t\ttotal_cnt=sum(of c1-c&nmeasure.);\n\t\t\t\n\t\t\tif total_cnt>0 then do;\n\t\t\tmeasure_wt=1/total_cnt;\n\t\t\tavg=sum(of &varlist.)*measure_wt;\n\t\t\tend;\n\t\trun;\n\t\t\n\t\t*standardization of group score;\n\t\tPROC STANDARD data=dat0 mean=0 std=1 out=dat1;var avg;run;\n\n\t\t*add mean and stddev into the data;\n\t\tods output summary=new(drop=variable);\n\t\tproc means data=dat0 stackodsoutput mean std ;\n\t \t\tvar avg;\n\t\trun;\n\n\t\tproc sql; \n\t  \t\tcreate table dat2 as\n\t  \t\tselect  *\n\t  \t\tfrom dat0, new;\n\t\tquit;\n\n\t\tdata &out_avg;merge dat2(rename=avg=score_before_std) dat1(keep=provider_ID avg rename=avg=grp_score);by provider_ID;run;\n%mend;",
+    "source_file": "data/Project_1/SAS Programs/Star_Macros.sas",
+    "line_start": 28,
+    "line_end": 63,
+    "inputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "outputs": [
+      "<out_avg macro parameter>"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "indsn": "&MEASURE_ANALYSIS",
+      "gp": "unused in macro body",
+      "varlist": "measures from config",
+      "nmeasure": "len(varlist)",
+      "Out_avg": "output table"
+    },
+    "notes": "Translate once as a function; the five group steps call it. Five parts: (1) flag/count/average data step, (2) PROC STANDARD mean=0 std=1, (3) PROC MEANS mean and std, (4) SQL cross join adds Mean and StdDev to every row, (5) merge by provider_ID, avg->score_before_std, standardized avg->grp_score. sum(of ...) ignores missing values. Both std calls use n-1 (ddof=1). Read PROVIDER_ID as text (leading zeros). Output columns in order: PROVIDER_ID, measures, C1..Cn, total_cnt, measure_wt, score_before_std, Mean, StdDev, grp_score. If total_cnt is 0, measure_wt and avg stay missing (not expected: program 0 keeps hospitals with Total_m_cnt >= 1)."
+  },
+  {
+    "id": "om",
+    "title": "Mortality group score",
+    "sas_code": "******************************************\n* Outcomes - Mortality \t\t\t\t\t *\n******************************************;\n*option mprint;\n/* count number of measures in Outcome Mortality Group */\nPROC SQL;\n\tselect count(measure_in_name)\n\tinto: measure_OM_cnt /*number of measures in this domain*/\n\tfrom Outcomes_mortality;/*Outcomes_mortality is generated from the SAS program '0 - Data and Measure Standardization_2025Jul'*/\nQUIT;\n\n\n/*OM is used to define the data name for mortality Group; \n&measure_OM is the measures in Mortality Group;\n&measure_OM_cnt is the number of measures in this Group;*/\n/*output group score in R.Outcome_mortality*/\n%grp_score(&MEASURE_ANALYSIS, OM, &measure_OM, &measure_OM_cnt,R.Outcome_mortality);",
+    "source_file": "data/Project_1/SAS Programs/1 - First stage_Simple Average of Measure Scores_2025Jul.sas",
+    "line_start": 27,
+    "line_end": 43,
+    "inputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "outputs": [
+      "OUTCOME_MORTALITY"
+    ],
+    "macros_called": [
+      "grp_score"
+    ],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "STD_DATA_2025JUL_ANALYSIS",
+      "measure_OM": "config/measure_groups.json -> OM.measures",
+      "measure_OM_cnt": 7
+    },
+    "notes": "The PROC SQL count() only counts the Outcomes_mortality table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_mortality. Needs grp_score_macro first."
+  },
+  {
+    "id": "os",
+    "title": "Safety of Care group score",
+    "sas_code": "***************************************\n* Outcomes - Safety of Care\t\t\t  *\n***************************************;\n\n/* count number of measures in Outcome Safety Group */\nPROC SQL;\n\tselect count(measure_in_name)\n\tinto: measure_OS_cnt\n\tfrom Outcomes_safety;/*Outcomes_safety is generated from the SAS program '0 - Data and Measure Standardization_2025Jul'*/\nQUIT;\n\n/*OS is used to define the data name for Safety Group; \n&measure_OS is the measures in Safety Group;\n&measure_OS_cnt is the number of measures in Safety Group;*/\n/*output group score in R.Outcome_safety */\n%grp_score(&MEASURE_ANALYSIS, OS, &measure_OS,  &measure_OS_cnt, R.Outcome_safety);",
+    "source_file": "data/Project_1/SAS Programs/1 - First stage_Simple Average of Measure Scores_2025Jul.sas",
+    "line_start": 46,
+    "line_end": 61,
+    "inputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "outputs": [
+      "OUTCOME_SAFETY"
+    ],
+    "macros_called": [
+      "grp_score"
+    ],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "STD_DATA_2025JUL_ANALYSIS",
+      "measure_OS": "config/measure_groups.json -> OS.measures",
+      "measure_OS_cnt": 8
+    },
+    "notes": "The PROC SQL count() only counts the Outcomes_safety table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_safety. Needs grp_score_macro first."
+  },
+  {
+    "id": "or",
+    "title": "Readmission group score",
+    "sas_code": "********************************************\n* Outcomes - Readmission \t\t\t\t   *\n********************************************;\n\n/* count number of measures in Outcome Readmission Group */\nPROC SQL;\n\tselect count(measure_in_name)\n\tinto: measure_OR_cnt\n\tfrom Outcomes_readmission;/*Outcomes_readmission is generated from the SAS program '0 - Data and Measure Standardization_2025Jul'*/\nQUIT;\n\n\n/*OR is used to define the data name for Readmission Group; \n&measure_OR is the measures in Readmission Group;\n&measure_OR_cnt is the number of measures in Readmission Group;*/\n/*output group score in R.Outcome_readmission*/\n%grp_score(&MEASURE_ANALYSIS, OR, &measure_OR, &measure_OR_cnt, R.Outcome_readmission);************;",
+    "source_file": "data/Project_1/SAS Programs/1 - First stage_Simple Average of Measure Scores_2025Jul.sas",
+    "line_start": 64,
+    "line_end": 80,
+    "inputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "outputs": [
+      "OUTCOME_READMISSION"
+    ],
+    "macros_called": [
+      "grp_score"
+    ],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "STD_DATA_2025JUL_ANALYSIS",
+      "measure_OR": "config/measure_groups.json -> OR.measures",
+      "measure_OR_cnt": 11
+    },
+    "notes": "The PROC SQL count() only counts the Outcomes_readmission table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_readmission. Needs grp_score_macro first. Line 80 ends with a stray '************;' that SAS treats as a comment."
+  },
+  {
+    "id": "ptexp",
+    "title": "Patient Experience group score",
+    "sas_code": "******************************************\n*  Patient Experience  \t\t\t\t\t *\n******************************************;\n\n/* count number of measures in Patient Experience Group */\nPROC SQL;\n\tselect count(measure_in_name)\n\tinto: measure_PtExp_cnt\n\tfrom Ptexp;/*Ptexp is generated from the SAS program '0 - Data and Measure Standardization_2025Jul'*/\nQUIT;\n\n\n/*PtExp is used to define the data name for Patient Experience Group; \n&measure_PtExp is the measures in Patient Experience Group;\n&measure_PtExp_cnt is the number of measures in Patient Experience Group;*/\n/*output group score in R.PtExp*/\n%grp_score(&MEASURE_ANALYSIS, PtExp, &measure_PtExp,  &measure_PtExp_cnt,R.PtExp);",
+    "source_file": "data/Project_1/SAS Programs/1 - First stage_Simple Average of Measure Scores_2025Jul.sas",
+    "line_start": 85,
+    "line_end": 101,
+    "inputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "outputs": [
+      "PTEXP"
+    ],
+    "macros_called": [
+      "grp_score"
+    ],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "STD_DATA_2025JUL_ANALYSIS",
+      "measure_PtExp": "config/measure_groups.json -> PtExp.measures",
+      "measure_PtExp_cnt": 8
+    },
+    "notes": "The PROC SQL count() only counts the Ptexp table from program 0; use len(measures) instead. Calls grp_score with out table R.PtExp. Needs grp_score_macro first."
+  },
+  {
+    "id": "process",
+    "title": "Timely and Effective Care group score",
+    "sas_code": "**********************************************\n* Timely and Effective Care                  *\n**********************************************;\n\n/* count number of measures in Timely and Effective Care */\nPROC SQL;\n\tselect count(measure_in_name)\n\tinto: measure_Process_cnt\n\tfrom Process;/*Process is generated from the SAS program '0 - Data and Measure Standardization_2025Jul'*/\nQUIT;\n\n\n/*Process is used to define the data name for Timely and Effective Care group; \n&measure_Process is the measures in Timely and Effective Care Group;\n&measure_Process_cnt is the number of measures in Timely and Effective Care;*/\n/*output group score in R.Process*/\n%grp_score(&MEASURE_ANALYSIS, Process, &measure_Process,  &measure_Process_cnt, R.Process);",
+    "source_file": "data/Project_1/SAS Programs/1 - First stage_Simple Average of Measure Scores_2025Jul.sas",
+    "line_start": 105,
+    "line_end": 121,
+    "inputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "outputs": [
+      "PROCESS"
+    ],
+    "macros_called": [
+      "grp_score"
+    ],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "STD_DATA_2025JUL_ANALYSIS",
+      "measure_Process": "config/measure_groups.json -> Process.measures",
+      "measure_Process_cnt": 12
+    },
+    "notes": "The PROC SQL count() only counts the Process table from program 0; use len(measures) instead. Calls grp_score with out table R.Process. Needs grp_score_macro first."
+  }
+]
