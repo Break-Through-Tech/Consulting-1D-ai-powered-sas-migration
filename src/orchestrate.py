@@ -310,3 +310,123 @@ def build_program1_plan(
         )
 
     return plan
+
+
+DEFAULT_SAS_OUTPUT_DIR = (
+    ROOT / "data" / "Project_1" / "SAS Output CSV"
+)
+
+
+def run_program1(
+    translate_step,
+    execute_step,
+    validate_output,
+    manifest_path=DEFAULT_MANIFEST,
+    config_path=DEFAULT_GROUP_CONFIG,
+    sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
+):
+    """
+    Run Program 1 through injected translation, execution, and validation steps.
+
+    Component implementations are injected so this orchestration layer is not
+    coupled to a specific translator or Python execution implementation.
+    Retry and runtime exception handling are intentionally handled separately.
+    """
+    plan = build_program1_plan(
+        manifest_path=manifest_path,
+        config_path=config_path,
+    )
+
+    sas_output_dir = Path(sas_output_dir)
+
+    step_results = []
+    output_results = {}
+    execution_outputs = {}
+
+    for step in plan:
+        if step["action"] == "skip":
+            step_results.append(
+                {
+                    "id": step["id"],
+                    "kind": step["kind"],
+                    "status": "SKIPPED",
+                }
+            )
+            continue
+
+        generated_code = translate_step(step)
+
+        dependency_outputs = {
+            dependency: execution_outputs[dependency]
+            for dependency in step["depends_on"]
+        }
+
+        execution_output = execute_step(
+            step,
+            generated_code,
+            dependency_outputs,
+        )
+
+        execution_outputs[step["id"]] = execution_output
+
+        step_result = {
+            "id": step["id"],
+            "kind": step["kind"],
+            "status": "COMPLETE",
+            "generated_code": generated_code,
+        }
+
+        if step["kind"] == "group":
+            output_table = step["group_config"]["output_table"]
+
+            sas_csv = (
+                sas_output_dir
+                / f"{output_table}.csv"
+            )
+
+            validation = validate_output(
+                execution_output,
+                sas_csv,
+                "PROVIDER_ID",
+            )
+
+            if (
+                not isinstance(validation, dict)
+                or type(validation.get("passed")) is not bool
+            ):
+                raise ValueError(
+                    "Validation result must contain a boolean "
+                    "'passed' value."
+                )
+
+            passed = validation["passed"]
+
+            status = (
+                "PASS"
+                if passed
+                else "FAIL"
+            )
+
+            step_result["status"] = status
+            step_result["output_table"] = output_table
+            step_result["validation"] = validation
+
+            output_results[output_table] = {
+                "step_id": step["id"],
+                "status": status,
+                "validation": validation,
+            }
+
+        step_results.append(step_result)
+
+    passed = all(
+        output["status"] == "PASS"
+        for output in output_results.values()
+    )
+
+    return {
+        "status": "PASS" if passed else "FAIL",
+        "passed": passed,
+        "steps": step_results,
+        "outputs": output_results,
+    }
