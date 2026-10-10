@@ -12,7 +12,10 @@
     "macro_vars": {
       "MEASURE_ANALYSIS": "R.Std_data_2025Jul_analysis"
     },
-    "notes": "Context only, no logic. R. is the folder of SAS output CSVs; R.Std_data_2025Jul_analysis is STD_DATA_2025JUL_ANALYSIS.csv. Not translated on its own."
+    "notes": "Context only, no logic. R. is the folder of SAS output CSVs; R.Std_data_2025Jul_analysis is STD_DATA_2025JUL_ANALYSIS.csv. Not translated on its own.",
+    "kind": "context",
+    "translate": false,
+    "depends_on": []
   },
   {
     "id": "grp_score_macro",
@@ -35,7 +38,10 @@
       "nmeasure": "len(varlist)",
       "Out_avg": "output table"
     },
-    "notes": "Translate once as a function; the five group steps call it. Five parts: (1) flag/count/average data step, (2) PROC STANDARD mean=0 std=1, (3) PROC MEANS mean and std, (4) SQL cross join adds Mean and StdDev to every row, (5) merge by provider_ID, avg->score_before_std, standardized avg->grp_score. sum(of ...) ignores missing values. Both std calls use n-1 (ddof=1). Read PROVIDER_ID as text (leading zeros). Output columns in order: PROVIDER_ID, measures, C1..Cn, total_cnt, measure_wt, score_before_std, Mean, StdDev, grp_score. If total_cnt is 0, measure_wt and avg stay missing (not expected: program 0 keeps hospitals with Total_m_cnt >= 1)."
+    "notes": "Translate once as a function; the five group steps call it. Five parts: (1) flag/count/average data step, (2) PROC STANDARD mean=0 std=1, (3) PROC MEANS mean and std, (4) SQL cross join adds Mean and StdDev to every row, (5) merge by provider_ID, avg->score_before_std, standardized avg->grp_score. sum(of ...) ignores missing values. Both std calls use n-1 (ddof=1). Read PROVIDER_ID as text (leading zeros). Output columns in order: PROVIDER_ID, measures, C1..Cn, total_cnt, measure_wt, score_before_std, Mean, StdDev, grp_score. If total_cnt is 0, measure_wt and avg stay missing (not expected: program 0 keeps hospitals with Total_m_cnt >= 1).",
+    "kind": "macro",
+    "translate": true,
+    "depends_on": []
   },
   {
     "id": "om",
@@ -58,7 +64,12 @@
       "measure_OM": "config/measure_groups.json -> OM.measures",
       "measure_OM_cnt": 7
     },
-    "notes": "The PROC SQL count() only counts the Outcomes_mortality table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_mortality. Needs grp_score_macro first."
+    "notes": "The PROC SQL count() only counts the Outcomes_mortality table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_mortality. Needs grp_score_macro first.",
+    "kind": "group",
+    "translate": true,
+    "depends_on": [
+      "grp_score_macro"
+    ]
   },
   {
     "id": "os",
@@ -81,7 +92,12 @@
       "measure_OS": "config/measure_groups.json -> OS.measures",
       "measure_OS_cnt": 8
     },
-    "notes": "The PROC SQL count() only counts the Outcomes_safety table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_safety. Needs grp_score_macro first."
+    "notes": "The PROC SQL count() only counts the Outcomes_safety table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_safety. Needs grp_score_macro first.",
+    "kind": "group",
+    "translate": true,
+    "depends_on": [
+      "grp_score_macro"
+    ]
   },
   {
     "id": "or",
@@ -104,7 +120,12 @@
       "measure_OR": "config/measure_groups.json -> OR.measures",
       "measure_OR_cnt": 11
     },
-    "notes": "The PROC SQL count() only counts the Outcomes_readmission table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_readmission. Needs grp_score_macro first. Line 80 ends with a stray '************;' that SAS treats as a comment."
+    "notes": "The PROC SQL count() only counts the Outcomes_readmission table from program 0; use len(measures) instead. Calls grp_score with out table R.Outcome_readmission. Needs grp_score_macro first. Line 80 ends with a stray '************;' that SAS treats as a comment.",
+    "kind": "group",
+    "translate": true,
+    "depends_on": [
+      "grp_score_macro"
+    ]
   },
   {
     "id": "ptexp",
@@ -127,7 +148,12 @@
       "measure_PtExp": "config/measure_groups.json -> PtExp.measures",
       "measure_PtExp_cnt": 8
     },
-    "notes": "The PROC SQL count() only counts the Ptexp table from program 0; use len(measures) instead. Calls grp_score with out table R.PtExp. Needs grp_score_macro first."
+    "notes": "The PROC SQL count() only counts the Ptexp table from program 0; use len(measures) instead. Calls grp_score with out table R.PtExp. Needs grp_score_macro first.",
+    "kind": "group",
+    "translate": true,
+    "depends_on": [
+      "grp_score_macro"
+    ]
   },
   {
     "id": "process",
@@ -150,6 +176,11 @@
       "measure_Process": "config/measure_groups.json -> Process.measures",
       "measure_Process_cnt": 12
     },
-    "notes": "The PROC SQL count() only counts the Process table from program 0; use len(measures) instead. Calls grp_score with out table R.Process. Needs grp_score_macro first."
+    "notes": "The PROC SQL count() only counts the Process table from program 0; use len(measures) instead. Calls grp_score with out table R.Process. Needs grp_score_macro first.",
+    "kind": "group",
+    "translate": true,
+    "depends_on": [
+      "grp_score_macro"
+    ]
   }
 ]

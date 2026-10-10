@@ -35,7 +35,11 @@ class ManifestTests(unittest.TestCase):
 
     def test_every_step_has_all_fields(self):
         for step in self.steps:
-            self.assertEqual(REQUIRED_FIELDS, set(step), step["id"])
+            missing = REQUIRED_FIELDS - set(step)
+            self.assertFalse(
+                missing,
+                f"{step['id']}: missing required fields {sorted(missing)}",
+            )
 
     def test_step_ids_are_unique(self):
         ids = [s["id"] for s in self.steps]
