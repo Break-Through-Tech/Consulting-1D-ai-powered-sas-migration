@@ -1,3 +1,8 @@
+"""
+Code was generateed with the help of Google Gemini. 
+This script translates SAS macros and group steps into Python code using pandas and numpy, 
+ensuring parity with the original SAS logic.
+"""
 import json
 import os
 from pathlib import Path
@@ -12,11 +17,14 @@ from google import genai
 from google.genai import types
 
 # Workspace Paths
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MANIFEST = ROOT / "manifests" / "program1.json"
 DEFAULT_GROUP_CONFIG = ROOT / "config" / "measure_groups.json"
 DEFAULT_SAS_OUTPUT_DIR = ROOT / "data" / "Project_1" / "SAS Output CSV"
 
+# Output Export Directories
+OUTPUT_CODE_DIR = ROOT / "output" / "generated_code"
+OUTPUT_DATA_DIR = ROOT / "output" / "data"
 
 # ---------------------------------------------------------------------------
 # 1. Pydantic Output Schema for Gemini Structured Generation
@@ -36,7 +44,7 @@ class GeminiSASTranslator:
     def __init__(self, api_key: Optional[str] = None):
         # Uses GEMINI_API_KEY environment variable if api_key is None
         self.client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY"))
-        self.model_name = "gemini-2.5-pro"
+        self.model_name = "gemini-3.5-flash-lite"
 
     def translate_macro(self, step_info: Dict[str, Any]) -> str:
         """Translates grp_score_macro into a standalone reusable Python function."""
@@ -113,6 +121,10 @@ class GeminiSASTranslator:
 # 2. Gemini Translation Client
 # ---------------------------------------------------------------------------
 def run_translator():
+    # Ensure export directories exist
+    OUTPUT_CODE_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
     # Load manifests and configuration files
     with open(DEFAULT_MANIFEST, encoding="utf-8") as f:
         manifest = json.load(f)
@@ -123,6 +135,11 @@ def run_translator():
     input_csv = DEFAULT_SAS_OUTPUT_DIR / "STD_DATA_2025JUL_ANALYSIS.csv"
     input_df = pd.read_csv(input_csv, dtype={"PROVIDER_ID": str})
     input_df["PROVIDER_ID"] = input_df["PROVIDER_ID"].astype(str).str.zfill(6)
+
+    # Export standard input DataFrame
+    input_save_path = OUTPUT_DATA_DIR / "input_df_{}.csv"
+    input_df.to_csv(input_save_path, index=False)
+    print(f"[+] Exported input DataFrame to: {input_save_path}")
 
     translator = GeminiSASTranslator()
 
@@ -153,6 +170,11 @@ def run_translator():
             print(f"[+] Translating '{step_id}' via Gemini API...")
             macro_code = translator.translate_macro(step)
 
+            # Export generated macro Python code
+            macro_code_path = OUTPUT_CODE_DIR / f"{step_id}.py"
+            macro_code_path.write_text(macro_code, encoding="utf-8")
+            print(f"    Exported macro code to: {macro_code_path}")
+
             # Compile generated macro function into execution scope
             exec(macro_code, exec_scope)
 
@@ -173,6 +195,11 @@ def run_translator():
             )
             step_code = translator.translate_group_step(step, measures)
 
+            # Export generated step Python code
+            step_code_path = OUTPUT_CODE_DIR / f"{step_id}_{output_table}.py"
+            step_code_path.write_text(step_code, encoding="utf-8")
+            print(f"    Exported step code to: {step_code_path}")
+
             # Prepare execution environment for step code
             exec_scope["input_df"] = input_df
             exec_scope["measures"] = measures
@@ -185,6 +212,11 @@ def run_translator():
                 print(f"Error: Gemini step code failed to produce 'out_df'.")
                 all_passed = False
                 continue
-            
+
+            # Export resulting output DataFrame to CSV
+            out_csv_path = OUTPUT_DATA_DIR / f"{output_table}.csv"
+            out_df.to_csv(out_csv_path, index=False)
+            print(f"    Exported output DataFrame to: {out_csv_path}")
+
 if __name__ == "__main__":
     run_translator()
