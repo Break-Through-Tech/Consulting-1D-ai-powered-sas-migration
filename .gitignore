@@ -2,3 +2,10 @@
 
 __pycache__/
 *.py[cod]
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+/output/program1_reviewed_code/
+/output/data/
