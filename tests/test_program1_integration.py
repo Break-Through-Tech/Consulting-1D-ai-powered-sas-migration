@@ -176,5 +176,71 @@ class Program1IntegrationTests(unittest.TestCase):
             self.generate()
 
 
+    def test_each_group_receives_independent_input_copy(self):
+        self.generate()
+
+        # Mortality changes a Safety measure that it does not use.
+        # Safety must still receive the original input data.
+        safety_measure = self.groups["OS"]["measures"][0]
+        self.assertNotIn(
+            safety_measure,
+            self.groups["OM"]["measures"],
+        )
+
+        (self.code_dir / "om.py").write_text(
+            f"input_df[{safety_measure!r}] = -999.0\n"
+            "out_df = grp_score(input_df, measures)\n",
+            encoding="utf-8",
+        )
+
+        result = self.execute()
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(
+            result["outputs"]["OUTCOME_SAFETY"]["status"],
+            "PASS",
+        )
+
+    def test_stale_outputs_cleared_before_execution_failure(self):
+        self.generate()
+        self.output_dir.mkdir()
+
+        # Simulate CSVs remaining from an earlier successful run.
+        for group in self.groups.values():
+            table = group["output_table"]
+            (self.output_dir / f"{table}.csv").write_text(
+                "stale output\n",
+                encoding="utf-8",
+            )
+
+        # Mortality runs first; Safety then fails deliberately.
+        (self.code_dir / "os.py").write_text(
+            "raise RuntimeError('intentional test failure')\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "intentional test failure",
+        ):
+            self.execute()
+
+        # Mortality produced a fresh CSV before the failure.
+        mortality = self.output_dir / "OUTCOME_MORTALITY.csv"
+        self.assertTrue(mortality.exists())
+        self.assertNotEqual(
+            mortality.read_text(encoding="utf-8"),
+            "stale output\n",
+        )
+
+        # The remaining groups must not retain stale CSVs.
+        for group in self.groups.values():
+            table = group["output_table"]
+            if table != "OUTCOME_MORTALITY":
+                self.assertFalse(
+                    (self.output_dir / f"{table}.csv").exists()
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
