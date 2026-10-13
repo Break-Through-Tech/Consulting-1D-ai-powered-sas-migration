@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import pandas as pd
@@ -158,6 +159,48 @@ class Program1IntegrationTests(unittest.TestCase):
 
         self.assertFalse(self.output_dir.exists())
 
+    def test_reviewed_run_reports_execution_failure(self):
+        self.generate()
+
+        (self.code_dir / "os.py").write_text(
+            "raise RuntimeError('intentional execution failure')",
+            encoding="utf-8",
+        )
+
+        result = run_reviewed_program1(
+            code_dir=self.code_dir,
+            input_csv=self.root / "input.csv",
+            output_dir=self.output_dir,
+            manifest_path=MANIFEST,
+            config_path=CONFIG,
+            sas_output_dir=self.sas_dir,
+            on_error="report",
+        )
+
+        self.assertEqual("FAIL", result["status"])
+        self.assertFalse(result["passed"])
+
+        safety = result["outputs"]["OUTCOME_SAFETY"]
+        self.assertEqual("ERROR", safety["status"])
+        self.assertEqual("RuntimeError", safety["error"]["type"])
+
+        safety_step = next(
+            step for step in result["steps"]
+            if step["id"] == "os"
+        )
+        self.assertEqual("execution", safety_step["stage"])
+
+        for table in (
+            "OUTCOME_MORTALITY",
+            "OUTCOME_READMISSION",
+            "PTEXP",
+            "PROCESS",
+        ):
+            self.assertEqual(
+                "PASS",
+                result["outputs"][table]["status"],
+            )
+
     def test_non_dataframe_output_is_rejected(self):
         self.generate()
 
@@ -168,6 +211,44 @@ class Program1IntegrationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(TypeError, "DataFrame"):
             self.execute()
+
+    def test_transient_translation_failure_is_retried(self):
+        class FlakyTranslator(FakeTranslator):
+            def translate_macro(self, step):
+                self.calls.append(step["id"])
+                if self.calls.count(step["id"]) == 1:
+                    raise TimeoutError("temporary translation timeout")
+                return self.MACRO_CODE
+
+        self.translator = FlakyTranslator()
+
+        with patch("src.pipeline_retry.time.sleep"):
+            generated = self.generate()
+
+        self.assertEqual(len(generated), 6)
+        self.assertEqual(
+            self.translator.calls.count("grp_score_macro"),
+            2,
+        )
+
+    def test_permanent_translation_error_is_not_retried(self):
+        class InvalidTranslator(FakeTranslator):
+            def translate_macro(self, step):
+                self.calls.append(step["id"])
+                raise ValueError("invalid translation input")
+
+        self.translator = InvalidTranslator()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "invalid translation input",
+        ):
+            self.generate()
+
+        self.assertEqual(
+            ["grp_score_macro"],
+            self.translator.calls,
+        )
 
     def test_generation_does_not_overwrite_existing_code(self):
         self.generate()

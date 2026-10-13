@@ -3,6 +3,7 @@
 import json
 from collections import Counter
 from pathlib import Path
+from src.pipeline_retry import retry_call
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -324,14 +325,18 @@ def run_program1(
     manifest_path=DEFAULT_MANIFEST,
     config_path=DEFAULT_GROUP_CONFIG,
     sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
+    on_error="raise",
 ):
     """
     Run Program 1 through injected translation, execution, and validation steps.
 
     Component implementations are injected so this orchestration layer is not
     coupled to a specific translator or Python execution implementation.
-    Retry and runtime exception handling are intentionally handled separately.
+    Use on_error='report' to collect runtime failures without raising them.
     """
+    if on_error not in ("raise", "report"):
+        raise ValueError("on_error must be raise or report.")
+
     plan = build_program1_plan(
         manifest_path=manifest_path,
         config_path=config_path,
@@ -354,70 +359,138 @@ def run_program1(
             )
             continue
 
-        generated_code = translate_step(step)
+        if on_error == "report":
+            unavailable = [
+                dependency
+                for dependency in step["depends_on"]
+                if dependency not in execution_outputs
+            ]
 
-        dependency_outputs = {
-            dependency: execution_outputs[dependency]
-            for dependency in step["depends_on"]
-        }
+            if unavailable:
+                step_results.append({
+                    "id": step["id"],
+                    "kind": step["kind"],
+                    "status": "BLOCKED",
+                    "blocked_by": unavailable,
+                })
 
-        execution_output = execute_step(
-            step,
-            generated_code,
-            dependency_outputs,
-        )
+                if step["kind"] == "group":
+                    table = step["group_config"]["output_table"]
+                    output_results[table] = {
+                        "step_id": step["id"],
+                        "status": "BLOCKED",
+                        "blocked_by": unavailable,
+                    }
 
-        execution_outputs[step["id"]] = execution_output
+                continue
 
-        step_result = {
-            "id": step["id"],
-            "kind": step["kind"],
-            "status": "COMPLETE",
-            "generated_code": generated_code,
-        }
+        stage = "translation"
 
-        if step["kind"] == "group":
-            output_table = step["group_config"]["output_table"]
+        try:
+            generated_code = translate_step(step)
 
-            sas_csv = (
-                sas_output_dir
-                / f"{output_table}.csv"
-            )
-
-            validation = validate_output(
-                execution_output,
-                sas_csv,
-                "PROVIDER_ID",
-            )
-
-            if (
-                not isinstance(validation, dict)
-                or type(validation.get("passed")) is not bool
-            ):
-                raise ValueError(
-                    "Validation result must contain a boolean "
-                    "'passed' value."
-                )
-
-            passed = validation["passed"]
-
-            status = (
-                "PASS"
-                if passed
-                else "FAIL"
-            )
-
-            step_result["status"] = status
-            step_result["output_table"] = output_table
-            step_result["validation"] = validation
-
-            output_results[output_table] = {
-                "step_id": step["id"],
-                "status": status,
-                "validation": validation,
+            stage = "execution"
+            dependency_outputs = {
+                dependency: execution_outputs[dependency]
+                for dependency in step["depends_on"]
             }
 
-        step_results.append(step_result)
+            execution_output = execute_step(
+                step,
+                generated_code,
+                dependency_outputs,
+            )
+
+            execution_outputs[step["id"]] = execution_output
+
+            step_result = {
+                "id": step["id"],
+                "kind": step["kind"],
+                "status": "COMPLETE",
+                "generated_code": generated_code,
+            }
+
+            stage = "validation"
+            if step["kind"] == "group":
+                output_table = step["group_config"]["output_table"]
+
+                sas_csv = (
+                    sas_output_dir
+                    / f"{output_table}.csv"
+                )
+
+                validation, _validation_attempts = retry_call(
+                    lambda: validate_output(
+                        execution_output,
+                        sas_csv,
+                        "PROVIDER_ID",
+                    ),
+                    max_attempts=3,
+                    delay_seconds=0.0,
+                )
+
+                if (
+                    not isinstance(validation, dict)
+                    or type(validation.get("passed")) is not bool
+                ):
+                    raise ValueError(
+                        "Validation result must contain a boolean "
+                        "'passed' value."
+                    )
+
+                passed = validation["passed"]
+
+                status = (
+                    "PASS"
+                    if passed
+                    else "FAIL"
+                )
+
+                step_result["status"] = status
+                step_result["output_table"] = output_table
+                step_result["validation"] = validation
+
+                output_results[output_table] = {
+                    "step_id": step["id"],
+                    "status": status,
+                    "validation": validation,
+                }
+
+            step_results.append(step_result)
+
+        except Exception as error:
+            if on_error == "raise":
+                raise
+
+            details = {
+                "type": type(error).__name__,
+                "message": str(error),
+            }
+
+            if hasattr(error, "attempts"):
+                details["attempts"] = error.attempts
+                original_error = getattr(
+                    error, "original_error", error
+                )
+                details["cause_type"] = type(
+                    original_error
+                ).__name__
+
+            step_results.append({
+                "id": step["id"],
+                "kind": step["kind"],
+                "status": "ERROR",
+                "stage": stage,
+                "error": details,
+            })
+
+            if step["kind"] == "group":
+                table = step["group_config"]["output_table"]
+                output_results[table] = {
+                    "step_id": step["id"],
+                    "status": "ERROR",
+                    "error": details,
+                }
 
     passed = all(
         output["status"] == "PASS"

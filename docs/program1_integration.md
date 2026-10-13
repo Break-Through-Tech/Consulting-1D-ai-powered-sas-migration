@@ -58,6 +58,39 @@ SAS comparison work. Validator tolerances have not been changed.
 ## Current limitations
 
 - Execution of reviewed code is not sandboxed.
-- Translation and execution exceptions are not yet converted into
-  structured per-step failure results.
+- Code-generation failures can leave partially generated files;
+  inspect the failure and use a new output directory when retrying.
+- Configuration and pre-execution file errors still raise exceptions.
 - Numerical parity with all five SAS outputs is not yet confirmed.
+
+## Retry and Error Handling
+
+Translation:
+- Temporary API failures (429, 5xx) and network errors are retried.
+- Maximum of 3 attempts, with exponential backoff starting at 2 seconds.
+- Permanent errors are raised immediately without retrying.
+- Exhausted transient retries raise `RetryFailure` with attempt information.
+
+Validation:
+- Temporary validation exceptions are retried up to 3 attempts.
+- Numerical mismatches (`passed=False`) are reported without retrying.
+- Validation retries do not regenerate or re-execute Python.
+
+Pipeline reporting:
+- `run_program1()` and `run_reviewed_program1()` support
+  `on_error="report"` for structured step-level error results.
+- The default `on_error="raise"` preserves existing behavior.
+- Reports identify the failed step, stage, error type, and message.
+- Retry exhaustion includes the attempt count and original error type.
+- Steps requiring unavailable execution outputs are marked `BLOCKED`.
+- Independent groups can continue after another group fails.
+- Validation mismatches are reported but do not automatically block
+  downstream execution.
+
+Recovery:
+- Inspect the reported failure before starting another run.
+- Resolve permanent errors rather than repeating the same operation.
+- Review all newly generated Python before executing it.
+- Use a fresh code directory after interrupted generation to avoid
+  mixing generated versions.
+- Execute reviewed code only in an appropriately isolated environment.

@@ -14,6 +14,7 @@ from src.orchestrate import (
     run_program1,
 )
 from src.validate import compare_detailed
+from src.pipeline_retry import retry_call
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +27,9 @@ def generate_program1_code(
     code_dir=DEFAULT_CODE_DIR,
     manifest_path=DEFAULT_MANIFEST,
     config_path=DEFAULT_GROUP_CONFIG,
+    *,
+    max_attempts=3,
+    retry_delay_seconds=2.0,
 ):
     """Generate and save code without executing it."""
     plan = build_program1_plan(manifest_path, config_path)
@@ -45,12 +49,18 @@ def generate_program1_code(
             continue
 
         if step["kind"] == "macro":
-            code = translator.translate_macro(step)
+            operation = lambda: translator.translate_macro(step)
         elif step["kind"] == "group":
             measures = step["group_config"]["measures"]
-            code = translator.translate_group_step(step, measures)
+            operation = lambda: translator.translate_group_step(step, measures)
         else:
             raise ValueError(f"Unsupported step kind: {step['kind']}")
+
+        code, _attempts = retry_call(
+            operation,
+            max_attempts=max_attempts,
+            delay_seconds=retry_delay_seconds,
+        )
 
         if not isinstance(code, str) or not code.strip():
             raise ValueError(f"Step {step['id']} returned empty Python code.")
@@ -69,6 +79,7 @@ def run_reviewed_program1(
     manifest_path=DEFAULT_MANIFEST,
     config_path=DEFAULT_GROUP_CONFIG,
     sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
+    on_error="raise",
 ):
     """Execute previously reviewed code through the existing Orchestrator."""
     code_dir = Path(code_dir)
@@ -149,4 +160,5 @@ def run_reviewed_program1(
         manifest_path=manifest_path,
         config_path=config_path,
         sas_output_dir=sas_output_dir,
+        on_error=on_error,
     )

@@ -553,6 +553,36 @@ class Program1PlanTests(unittest.TestCase):
         self.assertEqual("om", mortality["step_id"])
         self.assertTrue(mortality["validation"]["passed"])
 
+    def test_run_program1_retries_transient_validation_exception(self):
+        calls = {}
+
+        def translate_step(step):
+            return f"# generated {step['id']}"
+
+        def execute_step(step, generated_code, dependency_outputs):
+            return {"step_id": step["id"]}
+
+        def validate_output(output, sas_csv, key):
+            step_id = output["step_id"]
+            calls[step_id] = calls.get(step_id, 0) + 1
+
+            if step_id == "os" and calls[step_id] == 1:
+                raise TimeoutError("temporary validation timeout")
+
+            return {"passed": True}
+
+        result = run_program1(
+            translate_step,
+            execute_step,
+            validate_output,
+        )
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(2, calls["os"])
+
+        for step_id in ("om", "or", "ptexp", "process"):
+            self.assertEqual(1, calls[step_id])
+
     def test_run_program1_validation_failure_marks_run_failed(self):
         validated = []
 
@@ -677,6 +707,135 @@ class Program1PlanTests(unittest.TestCase):
                 ["grp_score_macro"],
                 list(received_dependencies[group_id]),
             )
+
+    def test_run_program1_reports_macro_failure_and_blocks_groups(self):
+        executed = []
+        validated = []
+
+        def translate_step(step):
+            if step["id"] == "grp_score_macro":
+                raise RuntimeError("macro translation failed")
+            return "# generated"
+
+        def execute_step(step, generated_code, dependency_outputs):
+            executed.append(step["id"])
+            return {"step_id": step["id"]}
+
+        def validate_output(output, sas_csv, key):
+            validated.append(output)
+            return {"passed": True}
+
+        result = run_program1(
+            translate_step,
+            execute_step,
+            validate_output,
+            on_error="report",
+        )
+
+        self.assertEqual("FAIL", result["status"])
+        self.assertFalse(result["passed"])
+
+        steps = {
+            step["id"]: step
+            for step in result["steps"]
+        }
+
+        macro = steps["grp_score_macro"]
+        self.assertEqual("ERROR", macro["status"])
+        self.assertEqual("translation", macro["stage"])
+        self.assertEqual("RuntimeError", macro["error"]["type"])
+
+        for step_id in ("om", "os", "or", "ptexp", "process"):
+            self.assertEqual("BLOCKED", steps[step_id]["status"])
+
+        self.assertEqual([], executed)
+        self.assertEqual([], validated)
+
+    def test_run_program1_reports_group_execution_error(self):
+        executed = []
+        validated = []
+
+        def translate_step(step):
+            return "# generated"
+
+        def execute_step(step, generated_code, dependencies):
+            executed.append(step["id"])
+            if step["id"] == "os":
+                raise RuntimeError("execution failed")
+            return {"step_id": step["id"]}
+
+        def validate_output(output, sas_csv, key):
+            validated.append(output["step_id"])
+            return {"passed": True}
+
+        result = run_program1(
+            translate_step,
+            execute_step,
+            validate_output,
+            on_error="report",
+        )
+
+        self.assertEqual("FAIL", result["status"])
+        self.assertFalse(result["passed"])
+        self.assertEqual(5, len(result["outputs"]))
+
+        safety = result["outputs"]["OUTCOME_SAFETY"]
+        self.assertEqual("ERROR", safety["status"])
+        self.assertEqual("RuntimeError", safety["error"]["type"])
+
+        safety_step = next(
+            step for step in result["steps"]
+            if step["id"] == "os"
+        )
+        self.assertEqual("execution", safety_step["stage"])
+
+        self.assertEqual(1, executed.count("os"))
+        self.assertNotIn("os", validated)
+
+        for step_id in ("om", "or", "ptexp", "process"):
+            self.assertIn(step_id, validated)
+
+    def test_run_program1_reports_exhausted_validation_retries(self):
+        calls = {}
+
+        def translate_step(step):
+            return "# generated"
+
+        def execute_step(step, generated_code, dependencies):
+            return {"step_id": step["id"]}
+
+        def validate_output(output, sas_csv, key):
+            step_id = output["step_id"]
+            calls[step_id] = calls.get(step_id, 0) + 1
+
+            if step_id == "os":
+                raise TimeoutError("validation timeout")
+
+            return {"passed": True}
+
+        result = run_program1(
+            translate_step,
+            execute_step,
+            validate_output,
+            on_error="report",
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(3, calls["os"])
+
+        safety_step = next(
+            step for step in result["steps"]
+            if step["id"] == "os"
+        )
+
+        self.assertEqual("ERROR", safety_step["status"])
+        self.assertEqual("validation", safety_step["stage"])
+        self.assertEqual("RetryFailure", safety_step["error"]["type"])
+        self.assertEqual(3, safety_step["error"]["attempts"])
+        self.assertEqual("TimeoutError", safety_step["error"]["cause_type"])
+
+        for step_id in ("om", "or", "ptexp", "process"):
+            self.assertEqual(1, calls[step_id])
 
     def test_run_program1_rejects_non_boolean_validation_result(self):
         def translate_step(step):
