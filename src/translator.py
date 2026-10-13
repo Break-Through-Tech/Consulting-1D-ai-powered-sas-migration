@@ -134,10 +134,10 @@ def run_translator():
     # Load base dataset
     input_csv = DEFAULT_SAS_OUTPUT_DIR / "STD_DATA_2025JUL_ANALYSIS.csv"
     input_df = pd.read_csv(input_csv, dtype={"PROVIDER_ID": str})
-    input_df["PROVIDER_ID"] = input_df["PROVIDER_ID"].astype(str).str.zfill(6)
+    input_df["PROVIDER_ID"] = input_df["PROVIDER_ID"].astype("string").str.zfill(6)
 
     # Export standard input DataFrame
-    input_save_path = OUTPUT_DATA_DIR / "input_df_{}.csv"
+    input_save_path = OUTPUT_DATA_DIR / "input_df.csv"
     input_df.to_csv(input_save_path, index=False)
     print(f"[+] Exported input DataFrame to: {input_save_path}")
 
@@ -150,6 +150,10 @@ def run_translator():
         cfg["output_table"].upper(): cfg["measures"]
         for cfg in measure_groups.values()
     }
+
+    # Remove previous run outputs so failures cannot leave stale results.
+    for output_table in table_to_measures:
+        (OUTPUT_DATA_DIR / f"{output_table}.csv").unlink(missing_ok=True)
 
     all_passed = True
 
@@ -200,23 +204,33 @@ def run_translator():
             step_code_path.write_text(step_code, encoding="utf-8")
             print(f"    Exported step code to: {step_code_path}")
 
-            # Prepare execution environment for step code
-            exec_scope["input_df"] = input_df
-            exec_scope["measures"] = measures
+            # Fresh scope per group so no group can see another group's variables.
+            step_scope = dict(exec_scope)
+            step_scope["input_df"] = input_df.copy(deep=True)
+            step_scope["measures"] = list(measures)
 
             # Run Gemini-generated step code
-            exec(step_code, exec_scope)
-            out_df = exec_scope.get("out_df")
+            exec(step_code, step_scope)
+            out_df = step_scope.get("out_df")
 
             if out_df is None:
                 print(f"Error: Gemini step code failed to produce 'out_df'.")
                 all_passed = False
                 continue
 
+            if not isinstance(out_df, pd.DataFrame):
+                raise TypeError(
+                    f"Step '{step_id}' must produce a pandas DataFrame; "
+                    f"received {type(out_df).__name__}."
+                )
+
             # Export resulting output DataFrame to CSV
             out_csv_path = OUTPUT_DATA_DIR / f"{output_table}.csv"
             out_df.to_csv(out_csv_path, index=False)
             print(f"    Exported output DataFrame to: {out_csv_path}")
 
+    return all_passed
+
+
 if __name__ == "__main__":
-    run_translator()
+    raise SystemExit(0 if run_translator() else 1)

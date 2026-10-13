@@ -1,1 +1,4 @@
-
+google-genai
+pydantic
+pandas
+numpy
