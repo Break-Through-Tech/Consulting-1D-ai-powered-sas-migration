@@ -137,7 +137,7 @@ def get_table_analysis(data_json):
   )
   return response.candidates[0].content.parts[0].text
 
-data_string =  result = json.dumps(result, indent=2, default=str)
+data_string = json.dumps(result, indent=2, default=str)
 
 # 3. Render the static AI-generated text output field
 st.subheader("AI Data Analysis")
