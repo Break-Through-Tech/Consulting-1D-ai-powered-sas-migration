@@ -10,6 +10,7 @@
 
 | Name             | GitHub Handle | Contribution                                                             |
 |------------------|---------------|--------------------------------------------------------------------------|
+| George Pulickan  | @George-Pulickan |          |
 | Hao Li.          | @becomingWise |             |
 | Lizzette Rivera  | @             |             |
 | Pawanjit Birdi   | @             |             |
