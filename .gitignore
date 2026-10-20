@@ -1,1 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
 
+# Secrets (API keys) - copy .env.example to .env
+.env
+
+# Tooling caches
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Generated pipeline outputs (Python-produced; SAS ground truth lives in data/)
+outputs/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

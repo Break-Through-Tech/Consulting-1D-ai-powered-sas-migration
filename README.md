@@ -31,13 +31,40 @@
 
 ## 👩🏽‍💻 **Setup and Installation**
 
-**Provide step-by-step instructions so someone else can run your code and reproduce your results. Depending on your setup, include:**
+Requires Python 3.11+ (developed on 3.12).
 
-* How to clone the repository
-* How to install dependencies
-* How to set up the environment
-* How to access the dataset(s)
-* How to run the notebook or scripts
+```bash
+# 1. Clone
+git clone https://github.com/Break-Through-Tech/Consulting-1D-ai-powered-sas-migration.git
+cd Consulting-1D-ai-powered-sas-migration
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+.venv\Scripts\activate          # Windows (PowerShell / cmd)
+source .venv/bin/activate       # macOS / Linux (Git Bash on Windows: source .venv/Scripts/activate)
+
+# 3. Install dependencies and this project's package (editable)
+pip install -r requirements.txt
+pip install -e .
+
+# 4. Add your Anthropic API key (needed for the LLM steps only)
+cp .env.example .env            # then edit .env
+
+# 5. Verify: imports work and all SAS data loads
+python -m pytest
+```
+
+**Data:** everything is already in the repo under `data/Project_1/`: the SAS programs, the input dataset (`Starrating/alldata_2025jul`) and the SAS-produced outputs (`SAS Output/*.sas7bdat` plus CSV copies). Load them with `sas_migration.data_io`:
+
+```python
+from sas_migration import data_io
+df = data_io.load_input()                          # 4566 hospitals x 93 columns
+star = data_io.load_sas_output("star_2025jul")     # SAS ground truth
+```
+
+Use the `.sas7bdat` outputs as ground truth for validation. The CSV exports are rounded, with differences of up to about 5e-7.
+
+**Windows note:** `requirements.txt` sets upper version limits on pandas, numpy, scipy and scikit-learn. On machines with Smart App Control, the newest releases' compiled DLLs were blocked on import ("An Application Control policy has blocked this file"). Don't raise the limits without checking that the imports still work.
 
 ---
 

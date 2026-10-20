@@ -1,1 +1,27 @@
+# Upper bounds keep us on established releases: on Windows with Smart App Control,
+# brand-new wheels (e.g. pandas 3.0, scipy 1.18) had their DLLs blocked at import.
 
+# Core data processing
+pandas>=2.2,<2.4
+numpy>=1.26,<2.3
+scipy>=1.13,<1.16
+pyreadstat>=1.2          # read .sas7bdat files
+
+# Statistics / clustering (PROC STANDARD, PROC MEANS, PROC FASTCLUS equivalents)
+scikit-learn>=1.5,<1.7
+statsmodels>=0.14,<0.15
+
+# Validation: compare Python outputs against SAS ground truth
+datacompy>=0.13
+pytest>=8.0
+
+# LLM / agentic workflow
+anthropic>=0.40
+pydantic>=2.7
+python-dotenv>=1.0       # load ANTHROPIC_API_KEY from .env
+
+# Exploration, demo, docs
+jupyter>=1.0
+matplotlib>=3.8
+streamlit>=1.35
+markdown>=3.6
