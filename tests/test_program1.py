@@ -4,7 +4,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sas_migration.baseline import program1
+from sas_migration import data_io
+from sas_migration.baseline import program0, program1
+from sas_migration.validate import compare_datasets
+
+
+@pytest.fixture(scope="module")
+def result():
+    p0 = program0.run(data_io.load_input())
+    return program1.run(p0.std_data_analysis, p0.group_measures)
+
+
+@pytest.mark.parametrize("name", list(program1.GROUP_OUTPUTS.values()))
+def test_output_matches_sas(result, name):
+    report = compare_datasets(result[name], data_io.load_sas_output(name), name)
+    assert report.passed, report.summary()
 
 
 @pytest.fixture

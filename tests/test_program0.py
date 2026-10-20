@@ -3,7 +3,7 @@
 import pytest
 
 from sas_migration import data_io
-from sas_migration.baseline import program0
+from sas_migration.baseline import program0, program1
 from sas_migration.validate import compare_datasets
 
 
@@ -20,10 +20,8 @@ def test_output_matches_sas(result, name):
 
 def test_group_measures_match_program1_outputs(result):
     # Program 1 writes each group's std_ measures first (after PROVIDER_ID), in group order.
-    sas_names = {"outcomes_mortality": "outcome_mortality", "outcomes_safety": "outcome_safety",
-                 "outcomes_readmission": "outcome_readmission", "ptexp": "ptexp", "process": "process"}
     for group, measures in result.group_measures.items():
-        sas_cols = list(data_io.load_sas_output(sas_names[group]).columns)
+        sas_cols = list(data_io.load_sas_output(program1.GROUP_OUTPUTS[group]).columns)
         assert sas_cols[1:1 + len(measures)] == measures
 
 

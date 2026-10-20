@@ -8,11 +8,23 @@ For each of the 5 measure groups:
   2. Average them: sum of non-missing scores times measure_wt = 1/total_cnt.
   3. Standardize the averages to mean 0, std 1 (PROC STANDARD) -> grp_score.
   4. Attach the pre-standardization mean and std (PROC MEANS) to every row.
+
+Run as a script to validate against the SAS outputs:
+    python -m sas_migration.baseline.program1
 """
 
 import pandas as pd
 
 KEY = "PROVIDER_ID"
+
+# Program 0 group key -> R. library dataset that program 1 writes for it.
+GROUP_OUTPUTS = {
+    "outcomes_mortality": "outcome_mortality",
+    "outcomes_safety": "outcome_safety",
+    "outcomes_readmission": "outcome_readmission",
+    "ptexp": "ptexp",
+    "process": "process",
+}
 
 
 def grp_score(analysis: pd.DataFrame, measures: list[str]) -> pd.DataFrame:
@@ -40,3 +52,22 @@ def grp_score(analysis: pd.DataFrame, measures: list[str]) -> pd.DataFrame:
         StdDev=std,
         grp_score=(avg - mean) / std,
     )
+
+
+def run(std_data_analysis: pd.DataFrame, group_measures: dict[str, list[str]]) -> dict[str, pd.DataFrame]:
+    """Program 1's permanent (R. library) datasets, keyed by SAS output name.
+
+    Takes program 0's analysis file and group measure lists (Program0Result).
+    """
+    return {GROUP_OUTPUTS[group]: grp_score(std_data_analysis, measures)
+            for group, measures in group_measures.items()}
+
+
+if __name__ == "__main__":
+    from sas_migration import data_io
+    from sas_migration.baseline import program0
+    from sas_migration.validate import compare_datasets
+
+    p0 = program0.run(data_io.load_input())
+    for name, df in run(p0.std_data_analysis, p0.group_measures).items():
+        print(compare_datasets(df, data_io.load_sas_output(name), name).summary())
