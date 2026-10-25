@@ -35,7 +35,34 @@ class ValidatorTests(unittest.TestCase):
         )
 
         self.assertTrue(result["passed"])
+        
+    def test_dataframe_reference_is_accepted(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["010001", "010005"],
+            "SCORE": [1.5, 2.5],
+        })
 
+        result = compare_detailed(
+            sas.copy(),
+            sas,
+            key="PROVIDER_ID",
+        )
+
+        self.assertTrue(result["passed"])
+
+        changed = sas.copy()
+        changed.loc[1, "SCORE"] = 9.9
+
+        result = compare_detailed(
+            changed,
+            sas,
+            key="PROVIDER_ID",
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertIn("SCORE", result["mismatches"])
+        
+        
     def test_value_mismatch_fails(self):
         sas = pd.DataFrame({
             "PROVIDER_ID": ["101", "102"],
