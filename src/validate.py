@@ -81,7 +81,13 @@ def compare_detailed(
     key = key.strip().upper()
 
     py = clean(py_df)
-    sas = clean(_read_sas_csv(sas_csv, key))
+    
+    # Accept either a SAS reference DataFrame (e.g. from a .sas7bdat file)
+    # or a path to a SAS CSV export.
+    if isinstance(sas_csv, pd.DataFrame):
+        sas = clean(sas_csv)
+    else:
+        sas = clean(_read_sas_csv(sas_csv, key))
 
     result = {
         "passed": False,
