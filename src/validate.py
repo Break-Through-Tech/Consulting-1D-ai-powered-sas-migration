@@ -17,6 +17,9 @@ import pandas as pd
 
 DEFAULT_RTOL = 1e-6
 DEFAULT_ATOL = 1e-12
+# Exact .sas7bdat references only differ by floating-point noise, so they
+# can use a much tighter tolerance than rounded CSV exports.
+SAS7BDAT_RTOL = 1e-9
 
 
 def clean(df):
@@ -69,7 +72,7 @@ def compare_detailed(
     py_df,
     sas_csv,
     key,
-    rtol=DEFAULT_RTOL,
+    rtol=None,
     atol=DEFAULT_ATOL,
 ):
     """
@@ -88,6 +91,9 @@ def compare_detailed(
         sas = clean(sas_csv)
     else:
         sas = clean(_read_sas_csv(sas_csv, key))
+
+    if rtol is None:
+        rtol = SAS7BDAT_RTOL if isinstance(sas_csv, pd.DataFrame) else DEFAULT_RTOL
 
     result = {
         "passed": False,
@@ -254,7 +260,7 @@ def compare(
     py_df,
     sas_csv,
     key,
-    tol=DEFAULT_RTOL,
+    tol=None,
     atol=DEFAULT_ATOL,
 ):
     """
