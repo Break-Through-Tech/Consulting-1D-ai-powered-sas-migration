@@ -1,0 +1,871 @@
+[
+  {
+    "id": "keep_hos_macro",
+    "title": "Macro %keep_hos (definition)",
+    "sas_code": "%macro keep_hos(indsn, varlist, nmeasure);\n\n\t\tdata &indsn(where = (Total_m_cnt>=1) drop=c1-c&nmeasure. k); \n\t\t\tset &indsn;\n\n\t\t\tarray M(&nmeasure.) &varlist.;\n\t\t\tarray C (1:&nmeasure.) C1-C&nmeasure.;\n\n\t        DO k =1 TO &nmeasure.;\n\t\t\tif m[k] ^=. then C[k]=1;\n\t   \t\telse C[k]=0;\n\t\t\tEND;\n\t\t\tTotal_m_cnt=sum(of c1-c&nmeasure.);\n\t\t\n\t\trun;\n%mend;",
+    "source_file": "data/Project_1/SAS Programs/Star_Macros.sas",
+    "line_start": 5,
+    "line_end": 20,
+    "inputs": [
+      "<indsn macro parameter>"
+    ],
+    "outputs": [
+      "<indsn macro parameter>"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "indsn": "macro parameter",
+      "varlist": "macro parameter",
+      "nmeasure": "macro parameter"
+    },
+    "notes": "Translate once as a function; the call steps reuse it.",
+    "kind": "macro",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "macro",
+    "status": "supported"
+  },
+  {
+    "id": "context_15",
+    "title": "Setup: %LET, LIBNAME, %INCLUDE",
+    "sas_code": "*****************************************************;\n\n/*This file is used to derive analysis data 'Std_data_2025Jul_analysis', which will be used in programs 1 and 2*/\n%LET PATH1=G:\\breakthrough\\Starrating; /* For 2025 Jul released data, MUST BE CHANGED */\n%LET PATH2=G:\\breakthrough\\SAS output;/* For derived data sets, MUST BE CHANGED */\n%LET PATH3=G:\\breakthrough\\SAS pack;  /* For SAS macros , MUST BE CHANGED  */\n\nLIBNAME HC \"&PATH1\";\nLIBNAME R \"&PATH2\";\n\n%INCLUDE \"&path3.\\Star_Macros.sas\";/*calling macros*/\n\n%LET year = 2025;\n%LET quarter = Jul;\n\n%LET MEASURE_MEAN=R.measure_average_stddev_&year.&quarter; /*mean and standard deviation of the original measure scores*/\n%LET MEASURE_ANALYSIS=R.Std_data_&year.&quarter._analysis; /* derived final analysis file */\n%LET RESULTS=R.Star_&year.&quarter; /* derive hospital-level Star file */\n%LET NATIONAL_MEAN=R.national_average_&year.&quarter; /* derived national average group and summary scores results */\n\n\n/*proc contents data=HC.Alldata_&year.&quarter.;run;*/\n\n/* measures on Hospital Compare in 2025Jul, after excluding re_tired measures, no_directional measures, \n\tstructural measures, and voluntary measures. */\n%LET measure_all = MORT_30_AMI MORT_30_CABG\tMORT_30_COPD MORT_30_HF\tMORT_30_PN\tMORT_30_STK\tPSI_4_SURG_COMP\t\nCOMP_HIP_KNEE HAI_1-HAI_6 PSI_90_SAFETY\t\nEDAC_30_AMI EDAC_30_HF EDAC_30_PN OP_32 READM_30_CABG READM_30_COPD READM_30_HIP_KNEE READM_30_HOSP_WIDE OP_35_ADM OP_35_ED OP_36\t\nH_COMP_1_STAR_RATING H_COMP_2_STAR_RATING H_COMP_3_STAR_RATING H_COMP_5_STAR_RATING H_COMP_6_STAR_RATING H_COMP_7_STAR_RATING H_GLOB_STAR_RATING H_INDI_STAR_RATING  \nHCP_COVID_19 IMM_3 OP_10 OP_13  OP_18b /*OP_2*/ OP_22 OP_23 OP_29 /*OP_3b*/ OP_8  PC_01 SAFE_USE_OF_OPIOIDS SEP_1;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 12,
+    "line_end": 41,
+    "inputs": [],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "PATH1": "G:\\breakthrough\\Starrating",
+      "PATH2": "G:\\breakthrough\\SAS output",
+      "PATH3": "G:\\breakthrough\\SAS pack",
+      "year": "2025",
+      "quarter": "Jul",
+      "MEASURE_MEAN": "R.measure_average_stddev_&year.&quarter",
+      "MEASURE_ANALYSIS": "R.Std_data_&year.&quarter._analysis",
+      "RESULTS": "R.Star_&year.&quarter",
+      "NATIONAL_MEAN": "R.national_average_&year.&quarter",
+      "measure_all": "MORT_30_AMI MORT_30_CABG MORT_30_COPD MORT_30_HF MORT_30_PN MORT_30_STK PSI_4_SURG_COMP COMP_HIP_KNEE HAI_1-HAI_6 PSI_90_SAFETY EDAC_30_AMI EDAC_30_HF EDAC_30_PN OP_32 READM_30_CABG READM_30_COPD READM_30_HIP_KNEE READM_30_HOSP_WIDE OP_35_ADM OP_35_ED OP_36 H_COMP_1_STAR_RATING H_COMP_2_STAR_RATING H_COMP_3_STAR_RATING H_COMP_5_STAR_RATING H_COMP_6_STAR_RATING H_COMP_7_STAR_RATING H_GLOB_STAR_RATING H_INDI_STAR_RATING HCP_COVID_19 IMM_3 OP_10 OP_13 OP_18b OP_22 OP_23 OP_29 OP_8 PC_01 SAFE_USE_OF_OPIOIDS SEP_1"
+    },
+    "notes": "",
+    "kind": "context",
+    "translate": false,
+    "depends_on": [],
+    "sas_type": "context",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_all_data_2025jul",
+    "title": "DATA -> WORK.ALL_DATA_2025JUL",
+    "sas_code": "************************************************************************\n* APPLY THE FOLLOWING EXCLUSION CRITERIA:                              *\n* MEASURE VOLUME <=100                                                 *\n************************************************************************;\n\nDATA All_data_&year.&quarter ;\n\tset HC.Alldata_&year.&quarter.;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 45,
+    "line_end": 52,
+    "inputs": [
+      "HC.ALLDATA_2025JUL"
+    ],
+    "outputs": [
+      "WORK.ALL_DATA_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_tabulate_work_measure_volume0",
+    "title": "PROC TABULATE -> WORK.MEASURE_VOLUME0",
+    "sas_code": "PROC TABULATE DATA=All_data_&year.&quarter out=measure_volume0; \n\tvar &measure_all;\n\n\ttable n*(&measure_all);\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 55,
+    "line_end": 59,
+    "inputs": [
+      "WORK.ALL_DATA_2025JUL"
+    ],
+    "outputs": [
+      "WORK.MEASURE_VOLUME0"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul",
+      "measure_all": "MORT_30_AMI MORT_30_CABG MORT_30_COPD MORT_30_HF MORT_30_PN MORT_30_STK PSI_4_SURG_COMP COMP_HIP_KNEE HAI_1-HAI_6 PSI_90_SAFETY EDAC_30_AMI EDAC_30_HF EDAC_30_PN OP_32 READM_30_CABG READM_30_COPD READM_30_HIP_KNEE READM_30_HOSP_WIDE OP_35_ADM OP_35_ED OP_36 H_COMP_1_STAR_RATING H_COMP_2_STAR_RATING H_COMP_3_STAR_RATING H_COMP_5_STAR_RATING H_COMP_6_STAR_RATING H_COMP_7_STAR_RATING H_GLOB_STAR_RATING H_INDI_STAR_RATING HCP_COVID_19 IMM_3 OP_10 OP_13 OP_18b OP_22 OP_23 OP_29 OP_8 PC_01 SAFE_USE_OF_OPIOIDS SEP_1"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_all_data_2025jul"
+    ],
+    "sas_type": "proc tabulate",
+    "status": "supported"
+  },
+  {
+    "id": "proc_transpose_work_measure_volume_t0",
+    "title": "PROC TRANSPOSE -> WORK.MEASURE_VOLUME_T0",
+    "sas_code": "PROC TRANSPOSE data=Measure_volume0 out=measure_volume_t0;\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 61,
+    "line_end": 62,
+    "inputs": [
+      "WORK.MEASURE_VOLUME0"
+    ],
+    "outputs": [
+      "WORK.MEASURE_VOLUME_T0"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_tabulate_work_measure_volume0"
+    ],
+    "sas_type": "proc transpose",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_include_measure0",
+    "title": "DATA -> WORK.INCLUDE_MEASURE0",
+    "sas_code": "DATA include_measure0  (drop=_NAME_ _LABEL_ rename = (COL1=freq)); \n\tSET measure_volume_t0;\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_in_name = tranwrd(_NAME_, '_N', '');\n\n\tmeasure_in_std = 'std_'||trim(measure_in_name);\n\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 64,
+    "line_end": 72,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T0"
+    ],
+    "outputs": [
+      "WORK.INCLUDE_MEASURE0"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t0"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_include_measure0",
+    "title": "PROC SQL (reads WORK.INCLUDE_MEASURE0)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_name into: measure_in separated by '' notrim\n\tfrom include_measure0;\nQUIT;\n%put &measure_in;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 74,
+    "line_end": 78,
+    "inputs": [
+      "WORK.INCLUDE_MEASURE0"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_in": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_include_measure0"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_include_measure0_2",
+    "title": "PROC SQL (reads WORK.INCLUDE_MEASURE0)",
+    "sas_code": "/* &measure_cnt: number of included measure */\nPROC SQL;\n\tselect count(measure_in_name)\n\tinto: measure_cnt\n\tfrom include_measure0;\nQUIT;\n%put &measure_cnt;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 81,
+    "line_end": 87,
+    "inputs": [
+      "WORK.INCLUDE_MEASURE0"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_cnt": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_include_measure0"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "proc_tabulate_work_measure_volume",
+    "title": "PROC TABULATE -> WORK.MEASURE_VOLUME",
+    "sas_code": "/*COUNT # HOSPITALS PER MEASURE FOR ALL MEASURES*/\nPROC TABULATE DATA=All_data_&year.&quarter out=measure_volume; \n\tvar &measure_all;\n\n\ttable n*(&measure_all);\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 90,
+    "line_end": 95,
+    "inputs": [
+      "WORK.ALL_DATA_2025JUL"
+    ],
+    "outputs": [
+      "WORK.MEASURE_VOLUME"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul",
+      "measure_all": "MORT_30_AMI MORT_30_CABG MORT_30_COPD MORT_30_HF MORT_30_PN MORT_30_STK PSI_4_SURG_COMP COMP_HIP_KNEE HAI_1-HAI_6 PSI_90_SAFETY EDAC_30_AMI EDAC_30_HF EDAC_30_PN OP_32 READM_30_CABG READM_30_COPD READM_30_HIP_KNEE READM_30_HOSP_WIDE OP_35_ADM OP_35_ED OP_36 H_COMP_1_STAR_RATING H_COMP_2_STAR_RATING H_COMP_3_STAR_RATING H_COMP_5_STAR_RATING H_COMP_6_STAR_RATING H_COMP_7_STAR_RATING H_GLOB_STAR_RATING H_INDI_STAR_RATING HCP_COVID_19 IMM_3 OP_10 OP_13 OP_18b OP_22 OP_23 OP_29 OP_8 PC_01 SAFE_USE_OF_OPIOIDS SEP_1"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_all_data_2025jul"
+    ],
+    "sas_type": "proc tabulate",
+    "status": "supported"
+  },
+  {
+    "id": "proc_transpose_work_measure_volume_t",
+    "title": "PROC TRANSPOSE -> WORK.MEASURE_VOLUME_T",
+    "sas_code": "PROC TRANSPOSE data=Measure_volume out=measure_volume_t;\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 97,
+    "line_end": 98,
+    "inputs": [
+      "WORK.MEASURE_VOLUME"
+    ],
+    "outputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_tabulate_work_measure_volume"
+    ],
+    "sas_type": "proc transpose",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_less100_measure",
+    "title": "DATA -> WORK.LESS100_MEASURE",
+    "sas_code": "/* IDENTIFY MEASURES WITH VOLUMN <=100 */\nDATA less100_measure  (drop=_NAME_ _LABEL_ rename = (COL1=freq)); \n\tSET measure_volume_t (where = (col1<=100));\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_name = tranwrd(_NAME_, '_N', '');\n\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 100,
+    "line_end": 107,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "outputs": [
+      "WORK.LESS100_MEASURE"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_less100_measure",
+    "title": "DATA -> LESS100_MEASURE",
+    "sas_code": "DATA R.less100_measure;SET less100_measure;RUN;*0;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 108,
+    "line_end": 108,
+    "inputs": [
+      "WORK.LESS100_MEASURE"
+    ],
+    "outputs": [
+      "LESS100_MEASURE"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_less100_measure"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_less100_measure",
+    "title": "PROC SQL (reads WORK.LESS100_MEASURE)",
+    "sas_code": "/* CREATE a measure list for count<=100 */\nPROC SQL;\n\tselect measure_Name\n\tinto: measure_exclude separated by '' notrim\n\tfrom Less100_measure;\nQUIT;\n%put &measure_exclude;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 110,
+    "line_end": 116,
+    "inputs": [
+      "WORK.LESS100_MEASURE"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_exclude": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_less100_measure"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_less100_measure_2",
+    "title": "DATA (reads WORK.LESS100_MEASURE)",
+    "sas_code": "DATA _null_;\n\tcall symputx('NOBS',NOBS);\n\tset Less100_measure nobs=NOBS;\nRUN;\n%put &=NOBS;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 118,
+    "line_end": 122,
+    "inputs": [
+      "WORK.LESS100_MEASURE"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_less100_measure"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_initial_data_2025jul",
+    "title": "DATA -> WORK.INITIAL_DATA_2025JUL",
+    "sas_code": "/* REMOVE MEASURES WHICH HAVE HOSPITAL COUNTS <=100*/\nDATA initial_data_&year.&quarter;\n\tSET All_data_&year.&quarter;\n\n\t/* drop measure(s) with volume <=100*/\n\t%if &NOBS>0 %then %do;\n  \t\tdrop &measure_exclude;\n\t%end;\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 125,
+    "line_end": 133,
+    "inputs": [
+      "WORK.ALL_DATA_2025JUL"
+    ],
+    "outputs": [
+      "WORK.INITIAL_DATA_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul",
+      "NOBS": "runtime (set by data_work_less100_measure_2)",
+      "measure_exclude": "runtime (set by proc_sql_work_less100_measure)"
+    },
+    "notes": "contains %if/%do/%end (macro logic inside the step)",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_all_data_2025jul",
+      "data_work_less100_measure_2",
+      "proc_sql_work_less100_measure"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_include_measure",
+    "title": "DATA -> WORK.INCLUDE_MEASURE",
+    "sas_code": "************************************************************************\n* CREATE NEEDED MEASURE NAME LIST                                      *\n************************************************************************;\n/* CREATE THE FINAL LISTS OF NAME OF INCLUDED MEASURES: &measure_in, &measure_in_std  */\nDATA include_measure  (drop=_NAME_ _LABEL_ rename = (COL1=freq)); \n\tSET measure_volume_t (where = (col1>100));\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_in_name = tranwrd(_NAME_, '_N', '');\n\n\tmeasure_in_std = 'std_'||trim(measure_in_name);\n\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 135,
+    "line_end": 147,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "outputs": [
+      "WORK.INCLUDE_MEASURE"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_include_measure",
+    "title": "PROC SQL (reads WORK.INCLUDE_MEASURE)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_name into: measure_in separated by '' notrim\n\tfrom include_measure;\nQUIT;\n%put &measure_in;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 149,
+    "line_end": 153,
+    "inputs": [
+      "WORK.INCLUDE_MEASURE"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_in": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_include_measure"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_include_measure_2",
+    "title": "PROC SQL (reads WORK.INCLUDE_MEASURE)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_std into: measure_in_std separated by '' notrim\n\tfrom include_measure;\nQUIT;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 155,
+    "line_end": 158,
+    "inputs": [
+      "WORK.INCLUDE_MEASURE"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_include_measure"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_include_measure_3",
+    "title": "PROC SQL (reads WORK.INCLUDE_MEASURE)",
+    "sas_code": "PROC SQL;\n\tselect count(measure_in_name)\n\tinto: measure_cnt\n\tfrom include_measure;\nQUIT;\n%put &measure_cnt;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 160,
+    "line_end": 165,
+    "inputs": [
+      "WORK.INCLUDE_MEASURE"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_cnt": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_include_measure"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_outcomes_mortality",
+    "title": "DATA -> WORK.OUTCOMES_MORTALITY",
+    "sas_code": "/* FINAL measuer list for outcome-mortality measure group: &measure_OM  - MUST CHANGE WHEN NEW MEASURE ADDED/REMOVED*/\nDATA outcomes_mortality (where = (col1>100)); \n\tSET measure_volume_t;\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_in_name = tranwrd(_NAME_, '_N', '');\n\n\tmeasure_in_std = 'std_'||trim(measure_in_name);\n\n\t/*** Here are ALL 7 Mortality measures ***/\n\tif measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW MEASURE ADDED/REMOVED IN THIS QUARTER*/   \n\t('MORT_30_AMI', 'MORT_30_CABG', 'MORT_30_COPD', 'MORT_30_HF', 'MORT_30_PN', 'MORT_30_STK', 'PSI_4_SURG_COMP');\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 170,
+    "line_end": 182,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "outputs": [
+      "WORK.OUTCOMES_MORTALITY"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_outcomes_mortality",
+    "title": "PROC SQL (reads WORK.OUTCOMES_MORTALITY)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_std\n\tinto: measure_OM separated by '' notrim\n\tfrom outcomes_mortality;\nQUIT;\n%put &measure_OM;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 184,
+    "line_end": 189,
+    "inputs": [
+      "WORK.OUTCOMES_MORTALITY"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_OM": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_outcomes_mortality"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_outcomes_safety",
+    "title": "DATA -> WORK.OUTCOMES_SAFETY",
+    "sas_code": "/* FINAL measuer list for outcome-safety measure group: &measure_OS  */\nDATA outcomes_safety  (where = (col1>100)); \n\tSET measure_volume_t;\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_in_name = tranwrd(_NAME_, '_N', '');\n\n\tmeasure_in_std = 'std_'||trim(measure_in_name);\n\n\t/*** Here are ALL 8 SAFETY measures ***/\n\tif measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW MEASURE ADDED/REMOVED IN THIS QUARTER*/ \n\t('COMP_HIP_KNEE',  'HAI_1', 'HAI_2', 'HAI_3', 'HAI_4', 'HAI_5', 'HAI_6', 'PSI_90_SAFETY');\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 192,
+    "line_end": 204,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "outputs": [
+      "WORK.OUTCOMES_SAFETY"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_outcomes_safety",
+    "title": "PROC SQL (reads WORK.OUTCOMES_SAFETY)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_std  into: measure_OS separated by '' notrim\n\tfrom outcomes_safety;\nQUIT;\n%put &measure_OS;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 206,
+    "line_end": 210,
+    "inputs": [
+      "WORK.OUTCOMES_SAFETY"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_OS": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_outcomes_safety"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_outcomes_readmission",
+    "title": "DATA -> WORK.OUTCOMES_READMISSION",
+    "sas_code": "/* FINAL measuer list for outcome-readmission measure group: &measure_OR  */\nDATA outcomes_readmission (where = (col1>100)); \n\tSET measure_volume_t;\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_in_name = tranwrd(_NAME_, '_N', '');\n\n\tmeasure_in_std = 'std_'||trim(measure_in_name);\n\n\t/*** Here are ALL 11 READMISSION measures ***/\n\tif measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW MEASURE ADDED/REMOVED IN THIS QUARTER*/ \n\t('EDAC_30_AMI', 'EDAC_30_HF', 'EDAC_30_PN', 'OP_32','READM_30_CABG', 'READM_30_COPD', 'READM_30_HIP_KNEE', \n\t'READM_30_HOSP_WIDE', 'OP_35_ADM', 'OP_35_ED', 'OP_36');\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 213,
+    "line_end": 226,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "outputs": [
+      "WORK.OUTCOMES_READMISSION"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_outcomes_readmission",
+    "title": "PROC SQL (reads WORK.OUTCOMES_READMISSION)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_std\n\tinto: measure_OR separated by '' notrim\n\tfrom outcomes_readmission;\nQUIT;\n%put &measure_OR;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 228,
+    "line_end": 233,
+    "inputs": [
+      "WORK.OUTCOMES_READMISSION"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_OR": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_outcomes_readmission"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_ptexp",
+    "title": "DATA -> WORK.PTEXP",
+    "sas_code": "/* FINAL measuer list for patient experience measure group: &measure_PtExp */\nDATA PtExp (where = (col1>100)); \n\tSET measure_volume_t;\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_in_name = tranwrd(_NAME_, '_N', '');\n\n\tmeasure_in_std = 'std_'||trim(measure_in_name);\n\n\t/*** Here are ALL 8 PATIENT EXPERIENCE measures  ***/\n\tif measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW MEASURE ADDED/REMOVED IN THIS QUARTER*/ \n\t('H_COMP_1_STAR_RATING', 'H_COMP_2_STAR_RATING', 'H_COMP_3_STAR_RATING', 'H_COMP_5_STAR_RATING', 'H_COMP_6_STAR_RATING',\n\t'H_COMP_7_STAR_RATING', 'H_GLOB_STAR_RATING', 'H_INDI_STAR_RATING');\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 235,
+    "line_end": 248,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "outputs": [
+      "WORK.PTEXP"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_ptexp",
+    "title": "PROC SQL (reads WORK.PTEXP)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_std\n\tinto: measure_PtExp separated by '' notrim\n\tfrom PtExp;\nQUIT;\n%put &measure_PtExp;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 250,
+    "line_end": 255,
+    "inputs": [
+      "WORK.PTEXP"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_PtExp": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_ptexp"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_process",
+    "title": "DATA -> WORK.PROCESS",
+    "sas_code": "DATA Process (where = (col1>100)); \n\tSET measure_volume_t;\n\n\tif _name_ ^= '_PAGE_'  and _name_^='_TABLE_';\n\tmeasure_in_name = tranwrd(_NAME_, '_N', '');\n\n\tmeasure_in_std = 'std_'||trim(measure_in_name);\n\n\t/*** Here are ALL 13Process measures ***/\n\tif measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW MEASURE ADDED/REMOVED IN THIS QUARTER*/ \n\n\t('HCP_COVID_19', 'IMM_3', 'OP_10', 'OP_13', 'OP_18B', /*'OP_2',*/ 'OP_22', 'OP_23', 'OP_29', /*'OP_3B',*/  'OP_8', 'PC_01', \n'SAFE_USE_OF_OPIOIDS', 'SEP_1');\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 261,
+    "line_end": 274,
+    "inputs": [
+      "WORK.MEASURE_VOLUME_T"
+    ],
+    "outputs": [
+      "WORK.PROCESS"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_transpose_work_measure_volume_t"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sql_work_process",
+    "title": "PROC SQL (reads WORK.PROCESS)",
+    "sas_code": "PROC SQL;\n\tselect measure_in_std\n\tinto: measure_Process separated by '' notrim\n\tfrom Process;\nQUIT;\n%put &measure_Process;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 277,
+    "line_end": 282,
+    "inputs": [
+      "WORK.PROCESS"
+    ],
+    "outputs": [],
+    "macros_called": [],
+    "macro_vars": {
+      "measure_Process": "runtime (set in this step)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_process"
+    ],
+    "sas_type": "proc sql",
+    "status": "supported"
+  },
+  {
+    "id": "call_keep_hos",
+    "title": "Call %keep_hos -> WORK.INITIAL_DATA_2025JUL",
+    "sas_code": "******************************************************************\n* REMOVE HOSPITALS WHICH DO NOT HAVE ANY FINAL INCLUDED MEASURES *\n******************************************************************;\n\n%keep_hos(Initial_data_&year.&quarter.,&measure_in,&measure_cnt);",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 284,
+    "line_end": 288,
+    "inputs": [
+      "WORK.INITIAL_DATA_2025JUL"
+    ],
+    "outputs": [
+      "WORK.INITIAL_DATA_2025JUL"
+    ],
+    "macros_called": [
+      "keep_hos"
+    ],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul",
+      "measure_in": "runtime (set by proc_sql_work_include_measure)",
+      "measure_cnt": "runtime (set by proc_sql_work_include_measure_3)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "keep_hos_macro",
+      "data_work_initial_data_2025jul",
+      "proc_sql_work_include_measure",
+      "proc_sql_work_include_measure_3"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "proc_means_measure_average_stddev_2025jul",
+    "title": "PROC MEANS -> MEASURE_AVERAGE_STDDEV_2025JUL",
+    "sas_code": "**************************************************************\n**Add an output file for mean and standard deviation of measure scores\n**************************************************************;\nproc means data=Initial_data_&year.&quarter;\n\tvar &measure_in;\n\toutput out=&MEASURE_MEAN;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 291,
+    "line_end": 297,
+    "inputs": [
+      "WORK.INITIAL_DATA_2025JUL"
+    ],
+    "outputs": [
+      "MEASURE_AVERAGE_STDDEV_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul",
+      "measure_in": "runtime (set by proc_sql_work_include_measure)",
+      "MEASURE_MEAN": "R.measure_average_stddev_2025Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "call_keep_hos",
+      "proc_sql_work_include_measure"
+    ],
+    "sas_type": "proc means",
+    "status": "supported"
+  },
+  {
+    "id": "proc_standard_work_std_data_2025jul",
+    "title": "PROC STANDARD -> WORK.STD_DATA_2025JUL",
+    "sas_code": "******************************\n* Standardize Measure Scores *\n******************************;\nPROC STANDARD data=Initial_data_&year.&quarter mean=0 std=1 out=Std_data_&year.&quarter;\n\tvar\t&measure_in;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 302,
+    "line_end": 307,
+    "inputs": [
+      "WORK.INITIAL_DATA_2025JUL"
+    ],
+    "outputs": [
+      "WORK.STD_DATA_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul",
+      "measure_in": "runtime (set by proc_sql_work_include_measure)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "call_keep_hos",
+      "proc_sql_work_include_measure"
+    ],
+    "sas_type": "proc standard",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_std_data_2025jul",
+    "title": "DATA -> WORK.STD_DATA_2025JUL",
+    "sas_code": "**********************\n* RE-DIRECT MEASURES *\n**********************;\nDATA Std_data_&year.&quarter;\n\tSET Std_data_&year.&quarter;\n\n\t/* flip measures which have negative direction, so all measures are in the same direction \n\t   and a higher score means better \n\t   -- MUST CHECK AND UPDATE IF MEASURES ARE REMOVED, OR MEASURES ARE ADDED AND NEED TO BE FLIPPED IN NEW QUARTERS*/\n\n\tMORT_30_AMI = -MORT_30_AMI;\n\tMORT_30_CABG = -MORT_30_CABG;\n\tMORT_30_COPD = -MORT_30_COPD;\n\tMORT_30_HF = -MORT_30_HF;\n\tMORT_30_PN = -MORT_30_PN;\n\tMORT_30_STK = -MORT_30_STK;\n\tPSI_4_SURG_COMP = -PSI_4_SURG_COMP;\n\n\tCOMP_HIP_KNEE = -COMP_HIP_KNEE;\n\tHAI_1= -HAI_1;\n\tHAI_2= -HAI_2;\n\tHAI_3= -HAI_3;\n\tHAI_4= -HAI_4;\n\tHAI_5= -HAI_5;\n\tHAI_6= -HAI_6;\n\tPSI_90_SAFETY = -PSI_90_SAFETY;\n\n\tEDAC_30_AMI = -EDAC_30_AMI;\n\tEDAC_30_HF  = -EDAC_30_HF;\n\tEDAC_30_PN = -EDAC_30_PN;\n\tOP_32 = -OP_32;\n\tREADM_30_CABG = -READM_30_CABG;\n\tREADM_30_COPD = -READM_30_COPD;\n\tREADM_30_HIP_KNEE = -READM_30_HIP_KNEE;\n\tREADM_30_HOSP_WIDE = -READM_30_HOSP_WIDE;\n\tOP_35_ADM= -OP_35_ADM;\n\tOP_35_ED= -OP_35_ED;\n\tOP_36= -OP_36;\n\n\tOP_22 = -OP_22;\n\tPC_01 = - PC_01;\n\n\t*OP_3B = -OP_3B;*OP_3B is removed in Year 2025;\n\tOP_18B = -OP_18B;\n\n\tOP_8 = -OP_8;\n\tOP_10 = -OP_10;\n\tOP_13 = -OP_13;\n\tSAFE_USE_OF_OPIOIDS=-SAFE_USE_OF_OPIOIDS;*SAFE_USE_OF_OPIOIDS is added in Year 2025;\nRUN;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 309,
+    "line_end": 358,
+    "inputs": [
+      "WORK.STD_DATA_2025JUL"
+    ],
+    "outputs": [
+      "WORK.STD_DATA_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "year": "2025",
+      "quarter": "Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_standard_work_std_data_2025jul"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_std_data_2025jul_analysis",
+    "title": "DATA -> STD_DATA_2025JUL_ANALYSIS",
+    "sas_code": "/* OUTPUTS OF 'std_data_2025Jul_analysis' ARE GENERATED*/\nDATA &MEASURE_ANALYSIS (drop=i &measure_in);\n\tSET Std_data_&year.&quarter;\n\n\tARRAY M(&measure_cnt) &measure_in;\n\n    ARRAY Y(&measure_cnt) &measure_in_std; \n\n    DO I =1 TO &measure_cnt;\n       Y[I] = m[I];  \n    END;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+    "line_start": 362,
+    "line_end": 373,
+    "inputs": [
+      "WORK.STD_DATA_2025JUL"
+    ],
+    "outputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "R.Std_data_2025Jul_analysis",
+      "measure_in": "runtime (set by proc_sql_work_include_measure)",
+      "year": "2025",
+      "quarter": "Jul",
+      "measure_cnt": "runtime (set by proc_sql_work_include_measure_3)",
+      "measure_in_std": "runtime (set by proc_sql_work_include_measure_2)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_std_data_2025jul",
+      "proc_sql_work_include_measure",
+      "proc_sql_work_include_measure_3",
+      "proc_sql_work_include_measure_2"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  }
+]
