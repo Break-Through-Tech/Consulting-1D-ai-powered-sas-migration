@@ -1,0 +1,829 @@
+[
+  {
+    "id": "report_macro",
+    "title": "Macro %report (definition)",
+    "sas_code": "%macro report(indsn, outdsn, nmeasure_OM, nmeasure_OS, nmeasure_OR, nmeasure_PtExp, nmeasure_Process);\n\n\tdata &outdsn. (keep=provider_id report_indicator Patient_Experience_cnt Outcomes_Readmission_cnt\n\t\t\t\t\t\t\t\tOutcomes_Mortality_cnt Outcomes_safety_cnt \n\t\t\t\t\t\t\t\tProcess_cnt Total_measure_group_cnt MortSafe_Group_cnt);\n\n\t\tset &indsn.; \n\n\t\t/* Mortality measures*/\n\t\tarray Y_M(&nmeasure_OM.) &measure_OM;\n\t\tARRAY M(&nmeasure_OM.) M1-M&nmeasure_OM.;\n\n\t\tDO I =1 TO &nmeasure_OM.;\n\t\t\tif Y_M[I] ^=. then M[I] =1;\n\t\t\telse M[I]=0;\n\t\tEND;\n\n\t\tOutcomes_Mortality_cnt=sum (of M1-M&nmeasure_OM.);\n\n\t\t/* Saftey measures */\n\t\tarray Y_S(&nmeasure_OS.) &measure_OS;\n\t\tARRAY S(&nmeasure_OS.) S1-S&nmeasure_OS.;\n\n\t\tDO I =1 TO &nmeasure_OS.;\n\t\t\tif Y_S[I] ^=. then S[I] =1;\n\t\t\telse S[I]=0;\n\t\tEND;\n\n\t\tOutcomes_safety_cnt=sum (of S1-S&nmeasure_OS.);\n\n\t\t/* Readmisison measures */\n\t\tarray Y_R(&nmeasure_OR.) &measure_OR;\n\t\tARRAY R(&nmeasure_OR.) R1-R&nmeasure_OR.;\n\n\t\tDO I =1 TO &nmeasure_OR.;\n\t\t\tif Y_R[I] ^=. then R[I] =1;\n\t\t\telse R[I]=0;\n\t\tEND;\n\n\t\tOutcomes_Readmission_cnt=sum (of R1-R&nmeasure_OR.);\n\n\t\t/* Patient Experience measures */\n\t\tarray Y_H(&nmeasure_PtExp.)  &measure_PtExp;\n\t\tarray H(&nmeasure_PtExp.) H1-H&nmeasure_PtExp.;\n\n\t\tDO I =1 TO &nmeasure_PtExp.;\n\t\t\tif Y_H[I] ^=. then H[I] =1;\n\t\t\telse H[I]=0;\n\t\tEND;\n\n\t\tPatient_Experience_cnt=sum (of H1-H&nmeasure_PtExp.);\n\n\n\t\t/* Timely and Effective Care measures */\n\t\tarray Y_PC(&nmeasure_Process.) &measure_Process;\n\t\tARRAY PC(&nmeasure_Process.) PC1-PC&nmeasure_Process.;\n\n\t\tDO I =1 TO &nmeasure_Process.;\n\t\t\tif Y_PC[I] ^=. then PC[I] =1;\n\t\t\telse PC[I]=0;\n\t\tEND;\n\n\t\tProcess_cnt =sum (of PC1-PC&nmeasure_Process.);\n\n\t\tArray D_cnt(5) Patient_Experience_cnt Outcomes_Mortality_cnt Outcomes_Readmission_cnt\n\t\t               Outcomes_safety_cnt  Process_cnt;\n\t\tArray D(5) D1-D5;\n\n\t\tDO I =1 TO 5;\n\t\t\tif D_cnt[I]>=3 then D[I] =1;\n\t\t\telse D[I]=0;\n\t\tEND;\n\n\t\tTotal_measure_group_cnt =sum (of D1-D5);\n\n\t\tMortSafe_Group_cnt = (Outcomes_Mortality_cnt>=3) + (Outcomes_safety_cnt>=3);\n\n\t\treport_indicator = (MortSafe_Group_cnt>=1) and (Total_measure_group_cnt>=3);\n\n\trun;\n%mend;",
+    "source_file": "data/Project_1/SAS Programs/Star_Macros.sas",
+    "line_start": 71,
+    "line_end": 151,
+    "inputs": [
+      "<indsn macro parameter>"
+    ],
+    "outputs": [
+      "<outdsn macro parameter>"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "indsn": "macro parameter",
+      "outdsn": "macro parameter",
+      "nmeasure_OM": "macro parameter",
+      "nmeasure_OS": "macro parameter",
+      "nmeasure_OR": "macro parameter",
+      "nmeasure_PtExp": "macro parameter",
+      "nmeasure_Process": "macro parameter"
+    },
+    "notes": "Translate once as a function; the call steps reuse it.",
+    "kind": "macro",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "macro",
+    "status": "supported"
+  },
+  {
+    "id": "kmeans_macro",
+    "title": "Macro %kmeans (definition)",
+    "sas_code": "%macro kmeans(in=, out=, grp=);\n\tdata summary_score2;\n\t\tset &in;\n\trun;\n\t*Step1. using quintile medians as intial seeds,  run K-means to complete convergence;\n\tproc univariate data=summary_score2 noprint;\n\t\tvar summary_score;\n\t\toutput out=s1 pctlpre=P pctlpts=20 to 100 by 20;\n\trun;\n\n\tdata s2(keep=provider_ID summary_score grp P20 P40 P60 P80);\n\t\tset summary_score2;\n\t\tif _n_=1 then set s1;\n\n\t\tif .<summary_score<=P20 then grp=1;\n\t\tif P20<summary_score<=P40 then grp=2;\n\t\tif P40<summary_score<=P60 then grp=3;\n\t\tif P60<summary_score<=P80 then grp=4;\n\t\tif P80<summary_score then grp=5;\n\trun;\n\n\tproc means data=s2 median;\n\t\tvar summary_score;class grp;\n\t\tods output summary=s3;\n\trun;\n\n\tdata s33;set s3;summary_score=summary_score_median;run;\n\n\t/* k-means*/\n\tproc fastclus data=Summary_score2 maxc=5 converge=0 maxiter=1000 seed=s33;************;\n\t\tvar\tsummary_score;\n\n\t\tods output ClusterCenters=seeds2;\n\t\tods output  ConvergenceStatus=cstatus;\n\trun;\n\tproc print data=cstatus;title \"QA: FASTCLUS convergence\"; run;\n\n\t*Step2. using results from Step 1 as initial seeds,  run K-means to complete convergence with 'strict=1' added; \n\t*to avoid potential outliers effect on clustering;\n\tproc fastclus data=Summary_score2 maxc=5 out=clusters converge=0 maxiter=1000 seed=seeds2 strict=1;************;\n\t\tvar\tsummary_score;\n\n\t\tods output ClusterCenters=Cluster_mean;\n\t\tods output  ConvergenceStatus=cstatus2;\n\trun;\n\tproc print data=cstatus2;title \"QA: FASTCLUS convergence\"; run;\n\n\t/* order clusters based on mean of summary scores */\n\tproc sort data=Cluster_mean out=cluster_sort (rename = (summary_score=mean_summary_score_star));\n\t\tby summary_score;\n\trun;\n\n\t/* assign Star based on ordered mean of summary scores */\n\tdata cluster_sort (drop=cluster);\n\t\tset cluster_sort;\n\t\tstar=_n_;\n\t\tcluster_2=input(cluster,4.);\n\trun;\n\n\tproc sort data=Cluster_sort(rename=(cluster_2=cluster));\n\t\tby cluster;\n\trun;\n\n\tdata Clusters2;\n\t\tset Clusters;\n\t\tcluster=abs(cluster);\n\trun;\n\n\tproc sort data=Clusters2;\n\t\tby cluster;\n\trun;\n\n\tdata RESULTS (drop=cluster distance mean_summary_score_star);\n\t\tmerge Clusters2  Cluster_sort;\n\t\tby cluster;\n\trun;\n\n\tproc sort data=RESULTS;by provider_ID;run;\n\tdata &out;set RESULTS(keep=provider_ID Star &grp );run;\n\n%mend kmeans;",
+    "source_file": "data/Project_1/SAS Programs/Star_Macros.sas",
+    "line_start": 157,
+    "line_end": 237,
+    "inputs": [
+      "<in macro parameter>"
+    ],
+    "outputs": [
+      "<out macro parameter>"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "in": "macro parameter",
+      "out": "macro parameter",
+      "grp": "macro parameter"
+    },
+    "notes": "Translate once as a function; the call steps reuse it.",
+    "kind": "macro",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "macro",
+    "status": "supported"
+  },
+  {
+    "id": "nation_avg0_macro",
+    "title": "Macro %nation_avg0 (definition)",
+    "sas_code": "%macro nation_avg0(indata=, out=, var=);\n   data temp;\n\t   set &indata;\n\t   where report_indicator=1;**********;\n\t   keep provider_id summary_score;\n\trun;\n\n\tproc sql;\n\t   create table out1 as\n\t   select mean(summary_score) as &var from temp;\n\tquit;\n    \n\tdata &out(keep=&var);set out1;run;\n%mend;",
+    "source_file": "data/Project_1/SAS Programs/Star_Macros.sas",
+    "line_start": 243,
+    "line_end": 256,
+    "inputs": [
+      "<indata macro parameter>"
+    ],
+    "outputs": [
+      "<out macro parameter>"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "indata": "macro parameter",
+      "out": "macro parameter",
+      "var": "macro parameter"
+    },
+    "notes": "Translate once as a function; the call steps reuse it.",
+    "kind": "macro",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "macro",
+    "status": "supported"
+  },
+  {
+    "id": "nation_avg_peer_macro",
+    "title": "Macro %nation_avg_peer (definition)",
+    "sas_code": "%macro nation_avg_peer(indata=, out=, var=, gr=);\n   data temp;\n\t   set &indata;\n\t   where report_indicator=1;**********;\n\t   keep provider_id summary_score &gr;\n\trun;\n\n\tproc sql;\n\t   create table out1 as\n\t   select mean(summary_score) as &var , &gr from temp group by &gr;\n\tquit;\n\n\tproc transpose data=out1 out=out2 prefix=&var._peer;\n\t\tvar &var;\n\t\tid &gr;\n\trun;\n\n\tdata &out;\n\t\tset out2;\n\t\tdrop _name_;\n\trun;\n%mend;",
+    "source_file": "data/Project_1/SAS Programs/Star_Macros.sas",
+    "line_start": 258,
+    "line_end": 279,
+    "inputs": [
+      "<indata macro parameter>"
+    ],
+    "outputs": [
+      "<out macro parameter>"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "indata": "macro parameter",
+      "out": "macro parameter",
+      "var": "macro parameter",
+      "gr": "macro parameter"
+    },
+    "notes": "Translate once as a function; the call steps reuse it.",
+    "kind": "macro",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "macro",
+    "status": "supported"
+  },
+  {
+    "id": "nation_avg_macro",
+    "title": "Macro %nation_avg (definition)",
+    "sas_code": "%macro nation_avg(indata=, out=, var=);\n   data temp;\n\t   set &indata;\n\t   where total_cnt>=3;**********;\n\t   keep provider_id total_cnt grp_score ;\n\trun;\n\n\tproc sql;\n\t   create table out1 as\n\t   select mean(grp_score) as &var from temp;\n\tquit;\n\n\tdata &out(keep=&var);set out1;run;\n%mend;",
+    "source_file": "data/Project_1/SAS Programs/Star_Macros.sas",
+    "line_start": 282,
+    "line_end": 295,
+    "inputs": [
+      "<indata macro parameter>"
+    ],
+    "outputs": [
+      "<out macro parameter>"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "indata": "macro parameter",
+      "out": "macro parameter",
+      "var": "macro parameter"
+    },
+    "notes": "Translate once as a function; the call steps reuse it.",
+    "kind": "macro",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "macro",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_all",
+    "title": "DATA -> WORK.ALL",
+    "sas_code": "*****************************************************************;\n\n/*This program is used to derive the hospital stars. The summary\n  score of each hospital is calculated based on the hospital's\n  group(domain) scores which are output from program 1. Then\n  the K-means approach is used to derive the hospital star ratings.\n*/\n\n/* put all group scores into one file */\ndata all; \n\tmerge  R.Outcome_mortality(keep=provider_id grp_score rename =grp_score=Std_Outcomes_Mortality_score)\n\t       R.Outcome_readmission(keep = provider_id grp_score rename = grp_score=Std_Outcomes_Readmission_score)\n\t       R.Outcome_safety(keep=provider_id grp_score rename =grp_score=Std_Outcomes_Safety_score)\n\t\t   R.Ptexp(keep = provider_id grp_score rename = grp_score=Std_PatientExp_score)\n\t       R.Process(keep=provider_id grp_score rename = grp_score=Std_Process_score);\n\tby provider_id;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 13,
+    "line_end": 29,
+    "inputs": [
+      "OUTCOME_MORTALITY",
+      "OUTCOME_READMISSION",
+      "OUTCOME_SAFETY",
+      "PTEXP",
+      "PROCESS"
+    ],
+    "outputs": [
+      "WORK.ALL"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_summary_score",
+    "title": "DATA -> WORK.SUMMARY_SCORE",
+    "sas_code": "*********************************************************\n*  CALCULATING SUMMARY SCORES BASED ON WEIGHTED AVERAGE *\n* 1) fixed standard weights from CMS\t\t\t\t    *\n* 2) redistribute weights when there is missing group   *\n*\t\t\t\t\t\t\t\t\t\t\t\t\t    *\n*********************************************************;\n\ndata summary_score (drop=I1-I5 w1-w5 grp_score1-grp_score5 k sum_weight_ave1-sum_weight_ave5);\n\tset all;\n\n\tarray std_weight(5) std_weight_PatientExperience std_weight_Readmission std_weight_Mortality std_weight_safety \n\t                   std_weight_Process;\n\n\tarray w(5) w1-w5;\n\n\tarray weight(5) weight_PatientExperience weight_Outcomes_Readmission weight_Outcomes_Mortality \n\t                weight_Outcomes_Safety weight_Process;\n\n\tarray score(5)   Std_PatientExp_score Std_Outcomes_Readmission_score Std_Outcomes_Mortality_score \n\t                Std_Outcomes_Safety_score Std_Process_score;\n\n\tarray grp_score(5) grp_score1-grp_score5;\n\t\t\n\tarray I(5) I1 I2 I3 I4 I5 ;\n\n\tarray sum_weight_ave(5) sum_weight_ave1 sum_weight_ave2 sum_weight_ave3 sum_weight_ave4 \n\t                        sum_weight_ave5;\n\n\n\t/* fixed standard weights from CMS */;\n\tstd_weight_PatientExperience = 0.22;\n\tstd_weight_Readmission = 0.22;\n\tstd_weight_Mortality = 0.22;\n\tstd_weight_safety = 0.22;\n\tstd_weight_Process = 0.12;\n\n\t/* create indicator for missing group*/\n\tdo k=1 to 5;\n\tw[k]= std_weight[k];\n\tgrp_score[k]=score[k];\n\n\tif grp_score[k] =. then I[k]=1;\n\t   else I[k]=0;\n\tend;\n\n\t/* Redistribute weights when there is missing group. For details, please refer to technical report. */\n\t/*For example, the group of Safety is missing, the weight for Mortality groups is changed \n\tfrom 22/100 to 22/78, the weight for Timely and Effective Care is changed from 12/100 to 12/78.*/\n\tdo k=1 to 5;\n\tif grp_score[k] =. then weight[k]=.;\n\t   else weight[k]=W[k]/(1-I1*W1-I2*W2-I3*W3-I4*W4-I5*W5);\n\tend;\n\n\tdo k=1 to 5;\n\tif weight[k] =. then sum_weight_ave[k]=0;\n\t\telse sum_weight_ave[k]=weight[k]*score[k];\n\tend;\n\n\t/* summary scores */\n\tsummary_score = sum (of sum_weight_ave1-sum_weight_ave5);\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 33,
+    "line_end": 93,
+    "inputs": [
+      "WORK.ALL"
+    ],
+    "outputs": [
+      "WORK.SUMMARY_SCORE"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_all"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "call_report",
+    "title": "Call %report -> WORK.REPORT_INDICATOR",
+    "sas_code": "**********************************************************************************************************\n** reporting criteria - minimum 3 measures/per group and 3 groups with one of which must be Safety or mortality to receive a Star*\n**********************************************************************************************************;\n%report(&MEASURE_ANALYSIS, report_indicator, &measure_OM_cnt, &measure_OS_cnt, &measure_OR_cnt, &measure_PtExp_cnt, \n\t    &measure_Process_cnt);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 96,
+    "line_end": 100,
+    "inputs": [
+      "STD_DATA_2025JUL_ANALYSIS"
+    ],
+    "outputs": [
+      "WORK.REPORT_INDICATOR"
+    ],
+    "macros_called": [
+      "report"
+    ],
+    "macro_vars": {
+      "MEASURE_ANALYSIS": "R.Std_data_2025Jul_analysis",
+      "measure_OM_cnt": "runtime (set by 1 - First stage_Simple Average of Measure Scores_2025Jul.sas)",
+      "measure_OS_cnt": "runtime (set by 1 - First stage_Simple Average of Measure Scores_2025Jul.sas)",
+      "measure_OR_cnt": "runtime (set by 1 - First stage_Simple Average of Measure Scores_2025Jul.sas)",
+      "measure_PtExp_cnt": "runtime (set by 1 - First stage_Simple Average of Measure Scores_2025Jul.sas)",
+      "measure_Process_cnt": "runtime (set by 1 - First stage_Simple Average of Measure Scores_2025Jul.sas)"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "report_macro"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sort_work_summary_score1",
+    "title": "PROC SORT -> WORK.SUMMARY_SCORE1",
+    "sas_code": "/* add reporting indicator and number of measure per measure group to Star output file */\nproc sort data=summary_score out=summary_score1;\n\tby provider_id;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 102,
+    "line_end": 105,
+    "inputs": [
+      "WORK.SUMMARY_SCORE"
+    ],
+    "outputs": [
+      "WORK.SUMMARY_SCORE1"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_summary_score"
+    ],
+    "sas_type": "proc sort",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sort_work_report_indicator",
+    "title": "PROC SORT -> WORK.REPORT_INDICATOR",
+    "sas_code": "proc sort data=report_indicator;\n\tby provider_id;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 107,
+    "line_end": 109,
+    "inputs": [
+      "WORK.REPORT_INDICATOR"
+    ],
+    "outputs": [
+      "WORK.REPORT_INDICATOR"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "call_report"
+    ],
+    "sas_type": "proc sort",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_summary_score21",
+    "title": "DATA -> WORK.SUMMARY_SCORE21",
+    "sas_code": "data summary_score21;\n\tmerge summary_score1 report_indicator;\n\tby provider_id;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 111,
+    "line_end": 114,
+    "inputs": [
+      "WORK.SUMMARY_SCORE1",
+      "WORK.REPORT_INDICATOR"
+    ],
+    "outputs": [
+      "WORK.SUMMARY_SCORE21"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "proc_sort_work_summary_score1",
+      "proc_sort_work_report_indicator"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_summary_score22",
+    "title": "DATA -> WORK.SUMMARY_SCORE22",
+    "sas_code": "/*define peer grouping based on # of groups*/\ndata summary_score22;\n\tset summary_score21;\n\tif report_indicator=1;*for those meeting report criteria;\n\n\ttotal_grp=(Outcomes_Mortality_cnt>=3)  + (Outcomes_safety_cnt>=3)+ (Outcomes_Readmission_cnt>=3)\n\t+(Patient_Experience_cnt>=3) +(Process_cnt>=3) ;\n\n\tif Total_measure_group_cnt=3 then cnt_grp='1) # of groups=3       ';\n\tif Total_measure_group_cnt=4 then cnt_grp='2) # of groups=4       ';\n\tif Total_measure_group_cnt=5 then cnt_grp='3) # of groups=5       ';\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 116,
+    "line_end": 127,
+    "inputs": [
+      "WORK.SUMMARY_SCORE21"
+    ],
+    "outputs": [
+      "WORK.SUMMARY_SCORE22"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_summary_score21"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_cnt_s10",
+    "title": "DATA -> WORK.CNT_S10",
+    "sas_code": "***********************************\n* Generate Star Rating by K-Means for each peer grouping*\n***********************************;\ndata cnt_s10;\n\tset summary_score22;\n\tif cnt_grp='1) # of groups=3       '; \nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 131,
+    "line_end": 137,
+    "inputs": [
+      "WORK.SUMMARY_SCORE22"
+    ],
+    "outputs": [
+      "WORK.CNT_S10"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_summary_score22"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "call_kmeans",
+    "title": "Call %kmeans -> WORK.CNT_S1",
+    "sas_code": "%kmeans(in=cnt_s10, out=cnt_s1,grp=cnt_grp);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 138,
+    "line_end": 138,
+    "inputs": [
+      "WORK.CNT_S10"
+    ],
+    "outputs": [
+      "WORK.CNT_S1"
+    ],
+    "macros_called": [
+      "kmeans"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "kmeans_macro",
+      "data_work_cnt_s10"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_cnt_s20",
+    "title": "DATA -> WORK.CNT_S20",
+    "sas_code": "data cnt_s20;\n\tset summary_score22;\n\tif cnt_grp='2) # of groups=4       ';\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 140,
+    "line_end": 143,
+    "inputs": [
+      "WORK.SUMMARY_SCORE22"
+    ],
+    "outputs": [
+      "WORK.CNT_S20"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_summary_score22"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "call_kmeans_2",
+    "title": "Call %kmeans -> WORK.CNT_S2",
+    "sas_code": "%kmeans(in=cnt_s20, out=cnt_s2,grp=cnt_grp);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 144,
+    "line_end": 144,
+    "inputs": [
+      "WORK.CNT_S20"
+    ],
+    "outputs": [
+      "WORK.CNT_S2"
+    ],
+    "macros_called": [
+      "kmeans"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "kmeans_macro",
+      "data_work_cnt_s20"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_cnt_s30",
+    "title": "DATA -> WORK.CNT_S30",
+    "sas_code": "data cnt_s30;\n\tset summary_score22;\n\tif cnt_grp='3) # of groups=5       '; \nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 146,
+    "line_end": 149,
+    "inputs": [
+      "WORK.SUMMARY_SCORE22"
+    ],
+    "outputs": [
+      "WORK.CNT_S30"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_summary_score22"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "call_kmeans_3",
+    "title": "Call %kmeans -> WORK.CNT_S3",
+    "sas_code": "%kmeans(in=cnt_s30, out=cnt_s3,grp=cnt_grp);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 150,
+    "line_end": 150,
+    "inputs": [
+      "WORK.CNT_S30"
+    ],
+    "outputs": [
+      "WORK.CNT_S3"
+    ],
+    "macros_called": [
+      "kmeans"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "kmeans_macro",
+      "data_work_cnt_s30"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "data_work_cnt_s_str",
+    "title": "DATA -> WORK.CNT_S_STR",
+    "sas_code": "data cnt_s_str;\n\tset cnt_s1 cnt_s2 cnt_s3;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 152,
+    "line_end": 154,
+    "inputs": [
+      "WORK.CNT_S1",
+      "WORK.CNT_S2",
+      "WORK.CNT_S3"
+    ],
+    "outputs": [
+      "WORK.CNT_S_STR"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "call_kmeans",
+      "call_kmeans_2",
+      "call_kmeans_3"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "proc_sort_work_cnt_s_str",
+    "title": "PROC SORT -> WORK.CNT_S_STR",
+    "sas_code": "proc sort data=cnt_s_str;\n\tby provider_ID;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 156,
+    "line_end": 158,
+    "inputs": [
+      "WORK.CNT_S_STR"
+    ],
+    "outputs": [
+      "WORK.CNT_S_STR"
+    ],
+    "macros_called": [],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_cnt_s_str"
+    ],
+    "sas_type": "proc sort",
+    "status": "supported"
+  },
+  {
+    "id": "data_star_2025jul",
+    "title": "DATA -> STAR_2025JUL",
+    "sas_code": "data &RESULTS;\n\tmerge Summary_score21 cnt_s_str;\n\tby provider_ID;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 160,
+    "line_end": 163,
+    "inputs": [
+      "WORK.SUMMARY_SCORE21",
+      "WORK.CNT_S_STR"
+    ],
+    "outputs": [
+      "STAR_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "RESULTS": "R.Star_2025Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_work_summary_score21",
+      "proc_sort_work_cnt_s_str"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_star_2025jul_2",
+    "title": "DATA -> STAR_2025JUL",
+    "sas_code": "/* OUTPUTS OF 'Star_2025Jul' ARE GENERATED*/\n/* label variables, output hospital stars */\ndata &RESULTS;\n\tset &RESULTS;\n\n\t\tlabel provider_id =\"Provider ID\";\n\t\tlabel summary_score = \"Hospital Summary Score\";\n\t\tlabel star = \"Star Rating\";\n\t\tlabel Total_measure_group_cnt = \"Number of Measure Groups with >=3 Measuers\";\n\t\tlabel MortSafe_group_cnt = \"Number of Mortality and Safety Groups with >=3 Measuers\";\n\t\tlabel cnt_grp = \"Peer Grouping\";\n\n\t\tlabel Outcomes_Mortality_cnt = \"Number of Measures in Outcomes-Mortality Group\";\n\t\tlabel Outcomes_Safety_cnt = \"Number of Measures in Outcomes-Safety Group\";\n\t\tlabel Outcomes_Readmission_cnt = \"Number of Measures in Outcomes-Readmission Group\";\n\t\tlabel Patient_Experience_cnt = \"Number of Measures in Patient Experience Group\";\n        label Process_cnt = \"Number of Measures in Timely and Effective Care Group\";\n\t\t\t\t\n\t\tlabel Std_Outcomes_Mortality_score = \"Standardized Outcomes-Mortality Group Score\";\n\t\tlabel Std_Outcomes_Safety_score = \"Standardized Outcomes-Safety Group Score\";\n\t\tlabel Std_Outcomes_Readmission_score = \"Standardized Outcomes-Readmission Group Score\";\n\t\tlabel Std_PatientExp_score = \"Standardized Patient Experience Group Score\"; \n\t\tlabel Std_Process_score = \"Standardized Timely and Effective Care Group Score\"; \n\n\t\tlabel report_indicator = \"Indicator for reporting Star Rating\";\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 166,
+    "line_end": 191,
+    "inputs": [
+      "STAR_2025JUL"
+    ],
+    "outputs": [
+      "STAR_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "RESULTS": "R.Star_2025Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_star_2025jul"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "call_nation_avg0",
+    "title": "Call %nation_avg0 -> WORK.SUMMARY_AVG",
+    "sas_code": "**************************************\n** National Average of Group Scores **\n**************************************;\n%nation_avg0(indata=&RESULTS, out=summary_avg, var=Summary_Score_Nat);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 193,
+    "line_end": 196,
+    "inputs": [
+      "STAR_2025JUL"
+    ],
+    "outputs": [
+      "WORK.SUMMARY_AVG"
+    ],
+    "macros_called": [
+      "nation_avg0"
+    ],
+    "macro_vars": {
+      "RESULTS": "R.Star_2025Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "nation_avg0_macro",
+      "data_star_2025jul_2"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "call_nation_avg_peer",
+    "title": "Call %nation_avg_peer -> WORK.SUMMARY_AVG_PEER",
+    "sas_code": "%nation_avg_peer(indata=&RESULTS, out=summary_avg_peer, var=Summary_Score_Nat, gr=Total_measure_group_cnt);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 197,
+    "line_end": 197,
+    "inputs": [
+      "STAR_2025JUL"
+    ],
+    "outputs": [
+      "WORK.SUMMARY_AVG_PEER"
+    ],
+    "macros_called": [
+      "nation_avg_peer"
+    ],
+    "macro_vars": {
+      "RESULTS": "R.Star_2025Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "nation_avg_peer_macro",
+      "data_star_2025jul_2"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "call_nation_avg",
+    "title": "Call %nation_avg -> WORK.OUTCOME_MORTALITY_AVG",
+    "sas_code": "%nation_avg(indata=r.Outcome_mortality, out=outcome_mortality_avg, var=Out_Mrt_Grp_Score_Nat);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 199,
+    "line_end": 199,
+    "inputs": [
+      "OUTCOME_MORTALITY"
+    ],
+    "outputs": [
+      "WORK.OUTCOME_MORTALITY_AVG"
+    ],
+    "macros_called": [
+      "nation_avg"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "nation_avg_macro"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "call_nation_avg_2",
+    "title": "Call %nation_avg -> WORK.OUTCOME_SAFETY_AVG",
+    "sas_code": "%nation_avg(indata=r.Outcome_safety, out=outcome_safety_avg, var=Out_Sft_Grp_Score_Nat);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 200,
+    "line_end": 200,
+    "inputs": [
+      "OUTCOME_SAFETY"
+    ],
+    "outputs": [
+      "WORK.OUTCOME_SAFETY_AVG"
+    ],
+    "macros_called": [
+      "nation_avg"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "nation_avg_macro"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "call_nation_avg_3",
+    "title": "Call %nation_avg -> WORK.OUTCOME_READMISSION_AVG",
+    "sas_code": "%nation_avg(indata=r.Outcome_readmission, out=outcome_readmission_avg, var=Out_Readm_grp_Score_Nat);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 201,
+    "line_end": 201,
+    "inputs": [
+      "OUTCOME_READMISSION"
+    ],
+    "outputs": [
+      "WORK.OUTCOME_READMISSION_AVG"
+    ],
+    "macros_called": [
+      "nation_avg"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "nation_avg_macro"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "call_nation_avg_4",
+    "title": "Call %nation_avg -> WORK.PTEXP_AVG",
+    "sas_code": "%nation_avg(indata=r.Ptexp, out=ptexp_avg, var=Pt_Exp_Grp_Score_Nat);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 202,
+    "line_end": 202,
+    "inputs": [
+      "PTEXP"
+    ],
+    "outputs": [
+      "WORK.PTEXP_AVG"
+    ],
+    "macros_called": [
+      "nation_avg"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "nation_avg_macro"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "call_nation_avg_5",
+    "title": "Call %nation_avg -> WORK.PROCESS_AVG",
+    "sas_code": "%nation_avg(indata=r.Process, out=process_avg, var=Prc_of_Care_Grp_Score_Nat);",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 203,
+    "line_end": 203,
+    "inputs": [
+      "PROCESS"
+    ],
+    "outputs": [
+      "WORK.PROCESS_AVG"
+    ],
+    "macros_called": [
+      "nation_avg"
+    ],
+    "macro_vars": {},
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "nation_avg_macro"
+    ],
+    "sas_type": "macro_call",
+    "status": "supported"
+  },
+  {
+    "id": "data_national_average_2025jul",
+    "title": "DATA -> NATIONAL_AVERAGE_2025JUL",
+    "sas_code": "data &NATIONAL_MEAN;\n\tmerge summary_avg summary_avg_peer\n\t\t  outcome_mortality_avg outcome_safety_avg outcome_readmission_avg ptexp_avg process_avg \n\t\t  /*outcome_readmission_avg_DE*/;\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 206,
+    "line_end": 210,
+    "inputs": [
+      "WORK.SUMMARY_AVG",
+      "WORK.SUMMARY_AVG_PEER",
+      "WORK.OUTCOME_MORTALITY_AVG",
+      "WORK.OUTCOME_SAFETY_AVG",
+      "WORK.OUTCOME_READMISSION_AVG",
+      "WORK.PTEXP_AVG",
+      "WORK.PROCESS_AVG"
+    ],
+    "outputs": [
+      "NATIONAL_AVERAGE_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "NATIONAL_MEAN": "R.national_average_2025Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "call_nation_avg0",
+      "call_nation_avg_peer",
+      "call_nation_avg",
+      "call_nation_avg_2",
+      "call_nation_avg_3",
+      "call_nation_avg_4",
+      "call_nation_avg_5"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  },
+  {
+    "id": "data_national_average_2025jul_2",
+    "title": "DATA -> NATIONAL_AVERAGE_2025JUL",
+    "sas_code": "/* OUTPUTS OF 'national_average_2025Jul' ARE GENERATED*/ \n/* label variables for the national average file, output national average group and summary scores results*/\ndata &NATIONAL_MEAN;\n\tset &NATIONAL_MEAN;\n\n\t\tlabel Summary_Score_Nat = \"National Mean of Summary Score\";\n\t\tlabel Out_Mrt_Grp_Score_Nat = \"National Mean of Outcomes-Mortality Group Score\";\n\t\tlabel Out_Sft_Grp_Score_Nat = \"National Mean of Outcomes-Safety Group Score\";\n\t\tlabel Out_Readm_grp_Score_Nat = \"National Mean of Outcomes-Readmission Group Score\";\n\t\tlabel Pt_Exp_Grp_Score_Nat = \"National Mean of Patient Experience Group Score\";\n\t\tlabel Prc_of_Care_Grp_Score_Nat = \"National Mean of Timely and Effective Care Group Score\";\n\n\t\tlabel Summary_Score_Nat_Peer3 = \"National Mean of Summary Score when # of Groups=3\";\n\t\tlabel Summary_Score_Nat_Peer4 = \"National Mean of Summary Score when # of Groups=4\";\n\t\tlabel Summary_Score_Nat_Peer5 = \"National Mean of Summary Score when # of Groups=5\";\nrun;",
+    "source_file": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+    "line_start": 212,
+    "line_end": 227,
+    "inputs": [
+      "NATIONAL_AVERAGE_2025JUL"
+    ],
+    "outputs": [
+      "NATIONAL_AVERAGE_2025JUL"
+    ],
+    "macros_called": [],
+    "macro_vars": {
+      "NATIONAL_MEAN": "R.national_average_2025Jul"
+    },
+    "notes": "",
+    "kind": "step",
+    "translate": true,
+    "depends_on": [
+      "data_national_average_2025jul"
+    ],
+    "sas_type": "data",
+    "status": "supported"
+  }
+]
