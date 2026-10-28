@@ -5,58 +5,108 @@ import json
 from google import genai
 
 
+st.set_page_config(layout="wide")
 # Add a title to your app
 st.title("Program 1 Demo")
 
+col1, col2, = st.columns(2)
+
 filepathSAS = "manifests/program1.json"
 with open(filepathSAS, "r", encoding="utf-8") as file:
-    code_content = file.read()
-# Add some descriptive text
-st.write("SAS Code")
-# 3. Display it using st.code
-st.code(code_content, language="SAS", line_numbers=True)
+    code_content = json.load(file)
 
-filepathgrp = "output/program1_reviewed_code/grp_score_macro.py"
-with open(filepathgrp, "r", encoding="utf-8") as file:
-    code_content = file.read()
-st.write("Python Code: grp_score_macro.py")
-# 3. Display it using st.code
-st.code(code_content, language="python", line_numbers=True)
+with col1:
+    st.subheader("SAS Code")
+    # Add some descriptive text
+    st.write("SAS Code: Star_Macros.sas")
+    # 3. Display it using st.code
+    sas_code1 = next((item["sas_code"] for item in code_content if item["id"] == "grp_score_macro"), None)
+    st.code(sas_code1, language="sas", line_numbers=True)
 
-filepathom = "output/program1_reviewed_code/om.py"
-with open(filepathom, "r", encoding="utf-8") as file:
-    code_content = file.read()
-st.write("Python Code: om.py")
-# 3. Display it using st.code
-st.code(code_content, language="python", line_numbers=True)
 
-filepathor = "output/program1_reviewed_code/or.py"
-with open(filepathor, "r", encoding="utf-8") as file:
-    code_content = file.read()
-st.write("Python Code: or.py")
-# 3. Display it using st.code
-st.code(code_content, language="python", line_numbers=True)
+with col2: 
+    st.subheader("Python Code")
+    filepathgrp = "output/program1_reviewed_code/grp_score_macro.py"
+    with open(filepathgrp, "r", encoding="utf-8") as file:
+       code_content2 = file.read()
+    st.write("Python Code: grp_score_macro.py")
+    # 3. Display it using st.code
+    st.code(code_content2, language="python", line_numbers=True)
 
-filepathos = "output/program1_reviewed_code/os.py"
-with open(filepathos, "r", encoding="utf-8") as file:
-    code_content = file.read()
-st.write("Python Code: os.py")
-# 3. Display it using st.code
-st.code(code_content, language="python", line_numbers=True)
+col1, col2, = st.columns(2)
+with col1:
+    st.write("SAS Code: 1 - First stage_Simple Average of Measure Scores_2025Jul.sas")
+    # 3. Display it using st.code
+    sas_code2 = next((item["sas_code"] for item in code_content if item["id"] == "om"), None)
+    st.code(sas_code2, language="sas", line_numbers=True)
 
-filepathproc = "output/program1_reviewed_code/process.py"
-with open(filepathproc, "r", encoding="utf-8") as file:
-    code_content = file.read()
-st.write("Python Code: process.py")
-# 3. Display it using st.code
-st.code(code_content, language="python", line_numbers=True)
+with col2:
+    filepathom = "output/program1_reviewed_code/om.py"
+    with open(filepathom, "r", encoding="utf-8") as file:
+       code_content2 = file.read()
+    st.write("Python Code: om.py")
+    # 3. Display it using st.code
+    st.code(code_content2, language="python", line_numbers=True)
 
-filepathptex = "output/program1_reviewed_code/ptexp.py"
-with open(filepathptex, "r", encoding="utf-8") as file:
-    code_content = file.read()
-st.write("Python Code: ptexp.py")
-# 3. Display it using st.code
-st.code(code_content, language="python", line_numbers=True)
+col1, col2, = st.columns(2)
+with col1:
+    st.write("SAS Code: 1 - First stage_Simple Average of Measure Scores_2025Jul.sas")
+    # 3. Display it using st.code
+    sas_code3 = next((item["sas_code"] for item in code_content if item["id"] == "or"), None)
+    st.code(sas_code3, language="sas", line_numbers=True)
+
+with col2:
+    filepathor = "output/program1_reviewed_code/or.py"
+    with open(filepathor, "r", encoding="utf-8") as file:
+       code_content2 = file.read()
+    st.write("Python Code: or.py")
+    # 3. Display it using st.code
+    st.code(code_content2, language="python", line_numbers=True)
+
+col1, col2, = st.columns(2)
+with col1:
+    st.write("SAS Code: 1 - First stage_Simple Average of Measure Scores_2025Jul.sas")
+    # 3. Display it using st.code
+    sas_code4 = next((item["sas_code"] for item in code_content if item["id"] == "os"), None)
+    st.code(sas_code4, language="sas", line_numbers=True)
+
+with col2:
+    filepathos = "output/program1_reviewed_code/os.py"
+    with open(filepathos, "r", encoding="utf-8") as file:
+       code_content2 = file.read()
+    st.write("Python Code: os.py")
+    # 3. Display it using st.code
+    st.code(code_content2, language="python", line_numbers=True)
+
+col1, col2, = st.columns(2)
+with col1:
+    st.write("SAS Code: 1 - First stage_Simple Average of Measure Scores_2025Jul.sas")
+    # 3. Display it using st.code
+    sas_code5 = next((item["sas_code"] for item in code_content if item["id"] == "process"), None)
+    st.code(sas_code5, language="sas", line_numbers=True)
+
+with col2:
+    filepathproc = "output/program1_reviewed_code/process.py"
+    with open(filepathproc, "r", encoding="utf-8") as file:
+       code_content2 = file.read()
+    st.write("Python Code: process.py")
+    # 3. Display it using st.code
+    st.code(code_content2, language="python", line_numbers=True)
+
+col1, col2, = st.columns(2)
+with col1:
+    st.write("SAS Code: 1 - First stage_Simple Average of Measure Scores_2025Jul.sas")
+    # 3. Display it using st.code
+    sas_code6 = next((item["sas_code"] for item in code_content if item["id"] == "ptexp"), None)
+    st.code(sas_code6, language="sas", line_numbers=True)
+
+with col2:    
+    filepathptex = "output/program1_reviewed_code/ptexp.py"
+    with open(filepathptex, "r", encoding="utf-8") as file:
+       code_content2 = file.read()
+    st.write("Python Code: ptexp.py")
+    # 3. Display it using st.code
+    st.code(code_content2, language="python", line_numbers=True)
 
 
 result = run_reviewed_program1()

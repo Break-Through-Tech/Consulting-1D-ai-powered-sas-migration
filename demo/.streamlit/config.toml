@@ -1,0 +1,7 @@
+[theme]
+primaryColor="#02fd02"
+# Main background color
+backgroundColor="#dbfdf6" 
+# Sidebar and secondary widget background color
+secondaryBackgroundColor="#ffffff" 
+textColor="#31333F"
