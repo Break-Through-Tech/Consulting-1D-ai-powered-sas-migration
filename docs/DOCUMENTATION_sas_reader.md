@@ -1,6 +1,8 @@
-# SAS Reader: Program 1 PR documentation
+# SAS Reader documentation
 
-Issue #12. Related: #13 (Translator).
+Two parts:
+1. **Program 1 manifest (hand-written)**: issue #12, related #13 (Translator). Below.
+2. **Automatic parser (Programs 0 and 2)**: issue #36. See "SAS Reader: automatic parser" further down. It generates `manifests/program0.json` and `manifests/program2.json`; `program1.json` stays hand-written.
 
 ## What this is
 The team is moving a SAS pipeline that scores hospitals into Python. Program 1 takes ~46
