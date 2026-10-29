@@ -61,7 +61,27 @@ class ValidatorTests(unittest.TestCase):
 
         self.assertFalse(result["passed"])
         self.assertIn("SCORE", result["mismatches"])
-        
+
+    def test_dataframe_reference_uses_tighter_tolerance(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101"],
+            "SCORE": [1.0],
+        })
+
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101"],
+            "SCORE": [1.0000001],
+        })
+
+        # A 1e-7 relative difference is too large for exact .sas7bdat data...
+        result = compare_detailed(py, sas, key="PROVIDER_ID")
+        self.assertFalse(result["passed"])
+
+        # ...but within tolerance for a rounded CSV export.
+        sas_csv = self.write_sas_csv(sas)
+        result = compare_detailed(py, sas_csv, key="PROVIDER_ID")
+        self.assertTrue(result["passed"])
+
         
     def test_value_mismatch_fails(self):
         sas = pd.DataFrame({
