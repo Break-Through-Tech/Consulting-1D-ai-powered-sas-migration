@@ -9,3 +9,4 @@ __pycache__/
 !.env.example
 /output/program1_reviewed_code/
 /output/data/
+.venv/
