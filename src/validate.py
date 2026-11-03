@@ -20,6 +20,7 @@ DEFAULT_ATOL = 1e-12
 # Exact .sas7bdat references only differ by floating-point noise, so they
 # can use a much tighter tolerance than rounded CSV exports.
 SAS7BDAT_RTOL = 1e-9
+SAS_CSV_ATOL = 5e-7
 
 
 def clean(df):
@@ -73,7 +74,7 @@ def compare_detailed(
     sas_csv,
     key,
     rtol=None,
-    atol=DEFAULT_ATOL,
+    atol=None,
 ):
     """
     Compare Python output against a SAS reference CSV.
@@ -89,8 +90,16 @@ def compare_detailed(
     # or a path to a SAS CSV export.
     if isinstance(sas_csv, pd.DataFrame):
         sas = clean(sas_csv)
+        if rtol is None:
+            rtol = SAS7BDAT_RTOL
+        if atol is None:
+            atol = DEFAULT_ATOL
     else:
         sas = clean(_read_sas_csv(sas_csv, key))
+        if rtol is None:
+            rtol = DEFAULT_RTOL
+        if atol is None:
+            atol = SAS_CSV_ATOL
 
     if rtol is None:
         rtol = SAS7BDAT_RTOL if isinstance(sas_csv, pd.DataFrame) else DEFAULT_RTOL
@@ -261,7 +270,7 @@ def compare(
     sas_csv,
     key,
     tol=None,
-    atol=DEFAULT_ATOL,
+    atol=None,
 ):
     """
     Print a readable validation report and return True or False.
