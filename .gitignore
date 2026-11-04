@@ -10,6 +10,10 @@ __pycache__/
 secrets.toml
 /output/program1_reviewed_code/
 /output/data/
+# Local translation history (including custom code directories)
+.translation_history/
+translation_history.json
+
 # Generated code, data, and reports from Program 1 feedback-loop runs.
 /output/program1_feedback/
 .venv/

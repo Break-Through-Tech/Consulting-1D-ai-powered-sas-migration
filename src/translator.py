@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 # Google GenAI SDK
 from google import genai
 from google.genai import types
+from src.translation_history import CandidateHistory, error_details
 
 # Workspace Paths
 ROOT = Path(__file__).resolve().parent.parent
@@ -158,7 +159,7 @@ class GeminiSASTranslator:
 # ---------------------------------------------------------------------------
 # 2. Gemini Translation Client
 # ---------------------------------------------------------------------------
-def run_translator():
+def run_translator(*, history_store=None):
     # Ensure export directories exist
     OUTPUT_CODE_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -180,6 +181,11 @@ def run_translator():
     print(f"[+] Exported input DataFrame to: {input_save_path}")
 
     translator = GeminiSASTranslator()
+    metadata = {"manifest_path": str(DEFAULT_MANIFEST), "config_path": str(DEFAULT_GROUP_CONFIG)}
+    model = getattr(translator, "model_name", None)
+    if isinstance(model, str):
+        metadata["model_name"] = model
+    history = CandidateHistory(OUTPUT_CODE_DIR, history_store, metadata=metadata, new=True)
 
     # Dynamic execution namespace
     exec_scope = {"pd": pd, "np": np, "List": List}
@@ -199,26 +205,17 @@ def run_translator():
     print("GEMINI API POWERED SAS-TO-PYTHON TRANSLATOR & PARITY CHECK")
     print("=" * 80)
 
-    for step in manifest:
+    def execute_candidate(step, code):
         step_id = step["id"]
         kind = step["kind"]
-        should_translate = step.get("translate", False)
-
-        if not should_translate:
-            print(f"[-] Step '{step_id}' ({kind}): SKIPPED")
-            continue
-
         if kind == "macro":
-            print(f"[+] Translating '{step_id}' via Gemini API...")
-            macro_code = translator.translate_macro(step)
-
             # Export generated macro Python code
             macro_code_path = OUTPUT_CODE_DIR / f"{step_id}.py"
-            macro_code_path.write_text(macro_code, encoding="utf-8")
+            macro_code_path.write_bytes(code.encode("utf-8"))
             print(f"    Exported macro code to: {macro_code_path}")
 
             # Compile generated macro function into execution scope
-            exec(macro_code, exec_scope)
+            exec(code, exec_scope)
 
             if "grp_score" not in exec_scope:
                 raise RuntimeError(
@@ -226,20 +223,15 @@ def run_translator():
                 )
 
             print("    Successfully compiled 'grp_score' into execution context.")
-            continue
+            return True
 
         if kind == "group":
             output_table = step["outputs"][0].upper()
             measures = table_to_measures[output_table]
 
-            print(
-                f"[+] Translating step '{step_id}' (Output: {output_table}) via Gemini API..."
-            )
-            step_code = translator.translate_group_step(step, measures)
-
             # Export generated step Python code
             step_code_path = OUTPUT_CODE_DIR / f"{step_id}_{output_table}.py"
-            step_code_path.write_text(step_code, encoding="utf-8")
+            step_code_path.write_bytes(code.encode("utf-8"))
             print(f"    Exported step code to: {step_code_path}")
 
             # Fresh scope per group so no group can see another group's variables.
@@ -248,13 +240,12 @@ def run_translator():
             step_scope["measures"] = list(measures)
 
             # Run Gemini-generated step code
-            exec(step_code, step_scope)
+            exec(code, step_scope)
             out_df = step_scope.get("out_df")
 
             if out_df is None:
                 print(f"Error: Gemini step code failed to produce 'out_df'.")
-                all_passed = False
-                continue
+                return False
 
             if not isinstance(out_df, pd.DataFrame):
                 raise TypeError(
@@ -266,6 +257,47 @@ def run_translator():
             out_csv_path = OUTPUT_DATA_DIR / f"{output_table}.csv"
             out_df.to_csv(out_csv_path, index=False)
             print(f"    Exported output DataFrame to: {out_csv_path}")
+
+        return True
+
+    for step in manifest:
+        step_id = step["id"]
+        kind = step["kind"]
+        if not step.get("translate", False):
+            print(f"[-] Step '{step_id}' ({kind}): SKIPPED")
+            continue
+        if kind not in {"macro", "group"}:
+            continue
+        print(f"[+] Translating '{step_id}' via Gemini API...")
+        try:
+            if kind == "macro":
+                code = translator.translate_macro(step)
+            else:
+                measures = table_to_measures[step["outputs"][0].upper()]
+                code = translator.translate_group_step(step, measures)
+        except Exception as error:
+            history.record({"type": "request_error", "step_id": step_id,
+                            "request_number": 1, "error": error_details(error)})
+            raise
+        if not isinstance(code, str):
+            error = TypeError(f"Step '{step_id}' returned non-string Python code.")
+            history.record({"type": "generation_error", "step_id": step_id,
+                            "error": error_details(error)})
+            raise error
+        candidate_id = history.candidate(step, code, origin="generated")
+        history.record({"type": "execution_started", "candidate_id": candidate_id,
+                        "review_status": "not_recorded", "entry_point": "run_translator"})
+        try:
+            succeeded = execute_candidate(step, code)
+        except Exception as error:
+            history.record({"type": "outcome", "candidate_id": candidate_id,
+                            "validation_status": "not_run", "status": "ERROR",
+                            "stage": "execution_or_export", "error": error_details(error)})
+            raise
+        history.record({"type": "outcome", "candidate_id": candidate_id,
+                        "validation_status": "not_run",
+                        "status": "COMPLETE" if succeeded else "MISSING_OUTPUT"})
+        all_passed = all_passed and succeeded
 
     return all_passed
 

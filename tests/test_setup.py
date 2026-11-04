@@ -60,7 +60,8 @@ class GenerateCommandTests(unittest.TestCase):
 
             self.assertEqual(
                 {path.name for path in code_dir.iterdir()},
-                {"grp_score_macro.py", "om.py", "os.py", "or.py", "ptexp.py", "process.py"},
+                {"grp_score_macro.py", "om.py", "os.py", "or.py", "ptexp.py", "process.py",
+                 ".translation_history", "translation_history.json"},
             )
             run.assert_not_called()
             self.assertIn("Read the code", output.getvalue())
