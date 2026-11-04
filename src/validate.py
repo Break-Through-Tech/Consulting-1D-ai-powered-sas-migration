@@ -6,7 +6,7 @@ Checks:
 2. Missing and unexpected columns
 3. Exact column order
 4. Missing, blank, and duplicate key values
-5. Row alignment by key
+5. Row alignment by key, or by row position when key=None
 6. Cell values using explicit numeric tolerance
 7. SAS-style text quirks such as padded text and blank = missing
 """
@@ -14,6 +14,10 @@ Checks:
 import numpy as np
 import pandas as pd
 
+
+# Temporary key for tables with no identifying column, such as the one-row
+# national averages. It holds each row's position.
+ROW_POSITION_KEY = "_ROW_POSITION_"
 
 DEFAULT_RTOL = 1e-6
 DEFAULT_ATOL = 1e-12
@@ -46,6 +50,9 @@ def _read_sas_csv(sas_csv, key):
     This prevents identifiers such as 001234 from being converted to
     integers and losing their leading zeros.
     """
+    if key is None:
+        return pd.read_csv(sas_csv)
+
     key_upper = key.strip().upper()
 
     header = pd.read_csv(sas_csv, nrows=0)
@@ -80,8 +87,12 @@ def compare_detailed(
 
     Returns structured validation details so callers such as the
     orchestration pipeline can determine why validation failed.
+
+    `key` names the column that identifies each row. Use key=None for a
+    table with no such column, which compares rows by position.
     """
-    key = key.strip().upper()
+    if key is not None:
+        key = key.strip().upper()
 
     py = clean(py_df)
     
@@ -97,6 +108,7 @@ def compare_detailed(
 
     result = {
         "passed": False,
+        "key_found": True,
         "row_count_match": len(py) == len(sas),
         "python_rows": len(py),
         "sas_rows": len(sas),
@@ -126,8 +138,17 @@ def compare_detailed(
         if column not in sas.columns
     ]
 
+    if key is None:
+        key = ROW_POSITION_KEY
+        # Never overwrite a real column that has the same name.
+        while key in py.columns or key in sas.columns:
+            key = f"_{key}"
+        py[key] = range(len(py))
+        sas[key] = range(len(sas))
+
     # We cannot safely align rows if the key column is missing.
     if key not in py.columns or key not in sas.columns:
+        result["key_found"] = False
         return result
 
     # Compare identifiers as text.
@@ -281,6 +302,9 @@ def compare(
         f"Rows: python={result['python_rows']}, "
         f"sas={result['sas_rows']}"
     )
+
+    if not result["key_found"]:
+        print(f"Key column {key} is not in both tables.")
 
     if not result["column_order_match"]:
         print("Column order does not match SAS output.")
