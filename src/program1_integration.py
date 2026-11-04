@@ -22,6 +22,130 @@ DEFAULT_CODE_DIR = ROOT / "output" / "program1_reviewed_code"
 DEFAULT_OUTPUT_DIR = ROOT / "output" / "data"
 
 
+def run_program1_with_feedback(
+    translator, review_code, *, max_attempts=3,
+    run_dir=ROOT / "output" / "program1_feedback",
+    input_csv=None, manifest_path=DEFAULT_MANIFEST,
+    config_path=DEFAULT_GROUP_CONFIG, sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
+):
+    """Generate, review, execute and repair Program 1 within a bounded run.
+
+    review_code receives a mapping of step IDs to candidate file paths on
+    every attempt. Only an explicit True allows execution. The caller must
+    arrange review and isolated execution; exec itself is not a sandbox.
+    max_attempts includes the initial translation. Runtime errors stop repair.
+    Operational failures return ERROR reports with completed validation history.
+    Invalid configuration and an existing run directory still raise before work.
+    Review is synchronous; a REVIEW_REQUIRED run cannot be resumed here.
+    """
+    if type(max_attempts) is not int or max_attempts < 1:
+        raise ValueError("max_attempts must be a positive integer.")
+    if not callable(review_code):
+        raise TypeError("review_code must be callable.")
+    plan = build_program1_plan(manifest_path, config_path)
+    run_dir = Path(run_dir)
+    # Never mix code or results from different runs.
+    run_dir.mkdir(parents=True, exist_ok=False)
+    history = []
+    previous_code = None
+    repair_steps = None
+    feedback = None
+
+    def report(status, code_dir, error=None):
+        # Keep the latest completed validation details separate from a failed
+        # candidate, which has not necessarily reached execution or validation.
+        latest = history[-1] if history else {"steps": [], "outputs": {}}
+        return {
+            **latest,
+            "status": status,
+            "passed": status == "PASS",
+            "attempts": list(history),
+            "attempt": attempt,
+            "code_dir": str(code_dir),
+            "error": error,
+        }
+
+    for attempt in range(1, max_attempts + 1):
+        attempt_dir = run_dir / f"attempt_{attempt}"
+        code_dir = attempt_dir / "code"
+        stage = "generation" if attempt == 1 else "repair"
+        repair_requests = 0
+
+        def request_repair():
+            nonlocal repair_requests
+            repair_requests += 1
+            return translator.repair_program1(repair_steps, previous_code, feedback)
+
+        try:
+            if attempt == 1:
+                files = generate_program1_code(
+                    translator, code_dir, manifest_path, config_path,
+                )
+            else:
+                repaired, _ = retry_call(
+                    request_repair,
+                    max_attempts=3, delay_seconds=2.0,
+                )
+                expected = {step["id"] for step in repair_steps}
+                if (not isinstance(repaired, dict) or set(repaired) != expected
+                        or any(not isinstance(code, str) or not code.strip()
+                               for code in repaired.values())):
+                    raise ValueError("Repair must return non-empty code for each requested step.")
+                code_dir.mkdir(parents=True)
+                files = {}
+                for step_id, code in {**previous_code, **repaired}.items():
+                    path = code_dir / f"{step_id}.py"
+                    path.write_text(code, encoding="utf-8")
+                    files[step_id] = path
+
+            stage = "review"
+            if review_code(dict(files)) is not True:
+                return report("REVIEW_REQUIRED", code_dir)
+
+            stage = "execution"
+            result = run_reviewed_program1(
+                code_dir=code_dir, input_csv=input_csv,
+                output_dir=attempt_dir / "data", manifest_path=manifest_path,
+                config_path=config_path, sas_output_dir=sas_output_dir,
+                on_error="report",
+            )
+            invalid_references = {
+                table for table, output in result["outputs"].items()
+                if output.get("validation", {}).get("duplicate_sas_ids")
+                or output.get("validation", {}).get("blank_sas_keys")
+            }
+            result = {**result, "non_repairable_outputs": sorted(invalid_references)}
+            failed_ids = {
+                output["step_id"] for table, output in result["outputs"].items()
+                if output["status"] == "FAIL" and table not in invalid_references
+            }
+            history.append({**result, "attempt": attempt, "code_dir": str(code_dir)})
+            if (result["passed"] or attempt == max_attempts or any(
+                step["status"] in {"ERROR", "BLOCKED"} for step in result["steps"]
+            ) or not failed_ids):
+                return report(result["status"], code_dir)
+
+            stage = "feedback"
+            # A shared macro change can affect every group, so rerun all groups.
+            repair_steps = [step for step in plan
+                            if step["kind"] == "macro" or step["id"] in failed_ids]
+            previous_code = {step_id: path.read_text(encoding="utf-8")
+                             for step_id, path in files.items()}
+            feedback = {table: output["validation"]
+                        for table, output in result["outputs"].items()
+                        if output["status"] == "FAIL" and table not in invalid_references}
+        except Exception as error:
+            details = {
+                "stage": stage,
+                "attempt": attempt,
+                "type": type(error).__name__,
+                "message": str(error),
+                "attempts": repair_requests if stage == "repair" else getattr(error, "attempts", 1),
+                "cause_type": type(getattr(error, "original_error", error)).__name__,
+            }
+            return report("ERROR", code_dir, details)
+
+
 def generate_program1_code(
     translator,
     code_dir=DEFAULT_CODE_DIR,
