@@ -9,3 +9,7 @@ __pycache__/
 !.env.example
 /output/program1_reviewed_code/
 /output/data/
+
+# Local translation history (including custom code directories)
+.translation_history/
+translation_history.json

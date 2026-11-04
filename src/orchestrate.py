@@ -326,6 +326,9 @@ def run_program1(
     config_path=DEFAULT_GROUP_CONFIG,
     sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
     on_error="raise",
+    *,
+    on_step_result=None,
+    execution_plan=None,
 ):
     """
     Run Program 1 through injected translation, execution, and validation steps.
@@ -333,11 +336,15 @@ def run_program1(
     Component implementations are injected so this orchestration layer is not
     coupled to a specific translator or Python execution implementation.
     Use on_error='report' to collect runtime failures without raising them.
+    on_step_result observes completed, failed, or blocked steps. Observer
+    failures propagate; persistence failures must never be reported as success.
+    execution_plan may supply an already validated build_program1_plan()
+    snapshot so persisted configuration and runtime configuration stay identical.
     """
     if on_error not in ("raise", "report"):
         raise ValueError("on_error must be raise or report.")
 
-    plan = build_program1_plan(
+    plan = execution_plan if execution_plan is not None else build_program1_plan(
         manifest_path=manifest_path,
         config_path=config_path,
     )
@@ -381,6 +388,9 @@ def run_program1(
                         "status": "BLOCKED",
                         "blocked_by": unavailable,
                     }
+
+                if on_step_result is not None:
+                    on_step_result(step_results[-1])
 
                 continue
 
@@ -459,9 +469,6 @@ def run_program1(
             step_results.append(step_result)
 
         except Exception as error:
-            if on_error == "raise":
-                raise
-
             details = {
                 "type": type(error).__name__,
                 "message": str(error),
@@ -476,13 +483,18 @@ def run_program1(
                     original_error
                 ).__name__
 
-            step_results.append({
+            failed_result = {
                 "id": step["id"],
                 "kind": step["kind"],
                 "status": "ERROR",
                 "stage": stage,
                 "error": details,
-            })
+            }
+            if on_step_result is not None:
+                on_step_result(failed_result)
+            if on_error == "raise":
+                raise
+            step_results.append(failed_result)
 
             if step["kind"] == "group":
                 table = step["group_config"]["output_table"]
@@ -491,6 +503,10 @@ def run_program1(
                     "status": "ERROR",
                     "error": details,
                 }
+
+        else:
+            if on_step_result is not None:
+                on_step_result(step_result)
 
     passed = all(
         output["status"] == "PASS"

@@ -7,6 +7,11 @@ Python execution, and SAS output Validator.
 
 ## Workflow
 
+Generation and reviewed execution now preserve candidate code and outcomes via
+a replaceable history store. Local JSON files and unique artifact directories
+are the team's current choice; see [Translation attempt history](translation_history.md) for the
+record format, retrieval, limitations, and custom backend interface.
+
 1. Configure a Gemini API key locally. Never commit API keys.
 2. Call `generate_program1_code()` with a `GeminiSASTranslator`
    instance to generate the macro and five group files.
