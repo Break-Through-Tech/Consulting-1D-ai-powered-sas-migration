@@ -35,10 +35,10 @@ class DataIOTests(unittest.TestCase):
                 self.assertEqual(sas.shape, EXPECTED_SHAPES[name])
                 self.assertEqual(list(sas.columns), list(csv.columns))
 
-                # The CSV exports are rounded copies, off by up to ~5e-7.
+                # The CSVs are full-precision copies, so only float parsing can differ.
                 numeric = sas.select_dtypes("number").columns
                 np.testing.assert_allclose(sas[numeric].to_numpy(float), csv[numeric].to_numpy(float),
-                                           rtol=0, atol=1e-6, equal_nan=True)
+                                           rtol=1e-12, atol=1e-12, equal_nan=True)
 
     def test_sas_programs_readable(self):
         for filename in data_io.SAS_PROGRAMS:

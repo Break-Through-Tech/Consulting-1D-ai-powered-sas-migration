@@ -1,7 +1,8 @@
 """Convert the provided .sas7bdat files to full-precision CSVs.
 
-The CSV exports we were given are rounded. These files hold the same values as
-the .sas7bdat files, with the same file names as the originals.
+The output CSVs we were first given are rounded, so the 10 output tables written
+here replaced them. See data/Project_1/archive/original_rounded_csv/README.md.
+These files hold the same values as the .sas7bdat files, with the same file names.
 
 Command line: python -m src.export_exact_csvs <output_dir>
 """

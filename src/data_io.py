@@ -1,7 +1,8 @@
 """Paths and loaders for the SAS pipeline's input data and ground-truth outputs.
 
-Use the .sas7bdat files as ground truth: the CSV exports are rounded
-(differences up to ~5e-7), which is too coarse for exact validation.
+The .sas7bdat files are the ground truth. The output CSVs hold the same exact
+values, made with src/export_exact_csvs.py. The rounded CSVs we were first given
+are in data/Project_1/archive/original_rounded_csv/.
 """
 
 from pathlib import Path
@@ -58,7 +59,7 @@ def load_sas_output(name: str) -> pd.DataFrame:
 
 
 def load_sas_output_csv(name: str) -> pd.DataFrame:
-    """The (rounded) CSV export of a SAS output dataset."""
+    """The full-precision CSV copy of a SAS output dataset."""
     return pd.read_csv(SAS_OUTPUT_CSV_DIR / f"{name.upper()}.csv", dtype={"PROVIDER_ID": str})
 
 
