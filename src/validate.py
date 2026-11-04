@@ -15,11 +15,10 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_RTOL = 1e-6
+# The references are exact, so correct output only differs by floating-point
+# noise. If a check fails, look at the failing rows instead of raising these (#40).
+DEFAULT_RTOL = 1e-9
 DEFAULT_ATOL = 1e-12
-# Exact .sas7bdat references only differ by floating-point noise, so they
-# can use a much tighter tolerance than rounded CSV exports.
-SAS7BDAT_RTOL = 1e-9
 
 
 def clean(df):
@@ -105,7 +104,7 @@ def compare_detailed(
         sas = clean(_read_sas_csv(sas_csv, key))
 
     if rtol is None:
-        rtol = SAS7BDAT_RTOL if isinstance(sas_csv, pd.DataFrame) else DEFAULT_RTOL
+        rtol = DEFAULT_RTOL
 
     result = {
         "passed": False,

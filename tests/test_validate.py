@@ -64,7 +64,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertIn("SCORE", result["mismatches"])
 
-    def test_dataframe_reference_uses_tighter_tolerance(self):
+    def test_csv_and_dataframe_references_use_the_same_tolerance(self):
         sas = pd.DataFrame({
             "PROVIDER_ID": ["101"],
             "SCORE": [1.0],
@@ -75,16 +75,24 @@ class ValidatorTests(unittest.TestCase):
             "SCORE": [1.0000001],
         })
 
-        # A 1e-7 relative difference is too large for exact .sas7bdat data...
+        # A 1e-7 relative difference is too large for either reference.
         result = compare_detailed(py, sas, key="PROVIDER_ID")
         self.assertFalse(result["passed"])
 
-        # ...but within tolerance for a rounded CSV export.
         sas_csv = self.write_sas_csv(sas)
         result = compare_detailed(py, sas_csv, key="PROVIDER_ID")
-        self.assertTrue(result["passed"])
+        self.assertFalse(result["passed"])
 
         
+    def test_default_tolerances_are_not_relaxed(self):
+        # Our coach's rule (#40): look at failing rows instead of raising these.
+        for sas_value, py_value in [(1_000_000.0, 1_000_000.002), (0.0, 1e-11)]:
+            with self.subTest(sas_value=sas_value):
+                sas = pd.DataFrame({"PROVIDER_ID": ["101"], "SCORE": [sas_value]})
+                py = pd.DataFrame({"PROVIDER_ID": ["101"], "SCORE": [py_value]})
+
+                self.assertFalse(compare_detailed(py, sas, key="PROVIDER_ID")["passed"])
+
     def test_value_mismatch_fails(self):
         sas = pd.DataFrame({
             "PROVIDER_ID": ["101", "102"],
@@ -369,7 +377,7 @@ class ValidatorTests(unittest.TestCase):
 
         py = pd.DataFrame({
             "PROVIDER_ID": ["101"],
-            "SCORE": [1_000_000.5],
+            "SCORE": [1_000_000.0005],
         })
 
         result = compare_detailed(
@@ -390,7 +398,7 @@ class ValidatorTests(unittest.TestCase):
 
         py = pd.DataFrame({
             "PROVIDER_ID": ["101"],
-            "SCORE": [1_000_009.0],
+            "SCORE": [1_000_000.5],
         })
 
         result = compare_detailed(

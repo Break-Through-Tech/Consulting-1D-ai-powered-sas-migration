@@ -80,6 +80,13 @@ class ExportExactCsvsTests(unittest.TestCase):
         self.assertEqual(text, "freq,measure_name")
 
 
+class CommittedCsvTests(unittest.TestCase):
+    def test_committed_output_csvs_match_sas_exactly(self):
+        for name in data_io.OUTPUT_DATASETS:
+            with self.subTest(name=name):
+                assert_same_as_sas(data_io.SAS_OUTPUT_CSV_DIR / f"{name.upper()}.csv", data_io.load_sas_output(name))
+
+
 class OverwriteGuardTests(unittest.TestCase):
     def test_existing_csv_is_never_overwritten(self):
         with tempfile.TemporaryDirectory() as temp:

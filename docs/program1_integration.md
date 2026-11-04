@@ -43,17 +43,19 @@ column order and provider IDs relative to the SAS reference outputs.
 Gemini generated six Python files successfully, and the execution
 and validation components ran end-to-end.
 
-Strict SAS validation currently reports FAIL for all five outputs.
-The remaining differences are small and concentrated in a few
-numerical columns.
+The output CSVs we were first given were rounded, so correct code
+failed against them, and all five outputs reported FAIL (#40).
+Those files are now in `data/Project_1/archive/original_rounded_csv/`.
+The CSVs in `SAS Output CSV/` hold the exact values from the
+`.sas7bdat` files, and the validator's default is `rtol=1e-9`,
+`atol=1e-12`.
 
-Across all five outputs, all Mean and StdDev values matched the
-SAS references when compared at six decimal places. This supports
-a reference-precision explanation but does not establish complete
-numerical equivalence.
+With the exact CSVs, one Gemini run passed all five outputs through
+this pipeline. Its largest difference from SAS was `1.07e-14`. This is
+one run on Program 1 only, so each new run still needs validating.
 
-Final SAS parity remains under investigation as part of the
-SAS comparison work. Validator tolerances have not been changed.
+If validation fails, look at the failing rows instead of raising the
+tolerance.
 
 ## Current limitations
 
