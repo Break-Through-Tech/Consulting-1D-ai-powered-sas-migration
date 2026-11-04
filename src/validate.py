@@ -15,10 +15,6 @@ import numpy as np
 import pandas as pd
 
 
-# Temporary key for tables with no identifying column, such as the one-row
-# national averages. It holds each row's position.
-ROW_POSITION_KEY = "_ROW_POSITION_"
-
 DEFAULT_RTOL = 1e-6
 DEFAULT_ATOL = 1e-12
 # Exact .sas7bdat references only differ by floating-point noise, so they
@@ -41,6 +37,11 @@ def clean(df):
             df[column] = values.mask(values == "")
 
     return df
+
+
+# Temporary key for tables with no identifying column, such as the one-row
+# national averages. It holds each row's position.
+ROW_POSITION_KEY = "_ROW_POSITION_"
 
 
 def _read_sas_csv(sas_csv, key):
