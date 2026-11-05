@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -115,6 +116,164 @@ class ValidatorTests(unittest.TestCase):
             result["mismatches"]["SCORE"]["count"],
             1,
         )
+
+    def test_column_stats_are_reported_when_table_passes(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [1.0, 2.0],
+        })
+
+        # Every value is slightly high, but all are within tolerance.
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [1.0 + 1e-10, 2.0 + 1e-10],
+        })
+
+        result = compare_detailed(py, sas, key="PROVIDER_ID")
+        stats = result["column_stats"]["SCORE"]
+
+        self.assertTrue(result["passed"])
+        self.assertAlmostEqual(stats["max_abs_diff"], 1e-10, delta=1e-12)
+        self.assertAlmostEqual(stats["mean_signed_diff"], 1e-10, delta=1e-12)
+
+    def test_column_stats_keep_the_sign_only_in_the_mean(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102", "103", "104"],
+            "SCORE": [1.0, 2.0, 4.0, 8.0],
+        })
+
+        # Python minus SAS is +1.0, 0.0, -3.0 and 0.0.
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102", "103", "104"],
+            "SCORE": [2.0, 2.0, 1.0, 8.0],
+        })
+
+        stats = compare_detailed(py, sas, key="PROVIDER_ID")["column_stats"]["SCORE"]
+
+        self.assertEqual(stats["max_abs_diff"], 3.0)
+        self.assertEqual(stats["mean_signed_diff"], -0.5)
+
+    def test_column_stats_line_rows_up_by_key(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [1.0, 2.0],
+        })
+
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["102", "101"],
+            "SCORE": [2.0, 1.0],
+        })
+
+        stats = compare_detailed(py, sas, key="PROVIDER_ID")["column_stats"]["SCORE"]
+
+        self.assertEqual(stats, {"max_abs_diff": 0.0, "mean_signed_diff": 0.0})
+
+    def test_column_stats_skip_rows_with_a_missing_value(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102", "103"],
+            "SCORE": [1.0, None, 3.0],
+        })
+
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102", "103"],
+            "SCORE": [None, 5.0, 3.5],
+        })
+
+        stats = compare_detailed(py, sas, key="PROVIDER_ID")["column_stats"]["SCORE"]
+
+        self.assertEqual(stats, {"max_abs_diff": 0.5, "mean_signed_diff": 0.5})
+
+    def test_column_stats_are_none_when_no_row_can_be_compared(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101"],
+            "SCORE": [None],
+        }).astype({"SCORE": float})
+
+        py = sas.copy()
+
+        result = compare_detailed(py, sas, key="PROVIDER_ID")
+
+        self.assertEqual(
+            result["column_stats"]["SCORE"],
+            {"max_abs_diff": None, "mean_signed_diff": None},
+        )
+
+    def test_column_stats_only_cover_numeric_value_columns(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101"],
+            "LABEL": ["A"],
+            "SCORE": [1.0],
+        })
+
+        result = compare_detailed(sas.copy(), sas, key="PROVIDER_ID")
+
+        self.assertEqual(list(result["column_stats"]), ["SCORE"])
+
+    def test_column_stats_work_when_comparing_by_row_position(self):
+        sas = pd.DataFrame({"SCORE": [1.0, 2.0]})
+        py = pd.DataFrame({"SCORE": [1.5, 2.5]})
+
+        result = compare_detailed(py, sas, key=None)
+
+        self.assertEqual(
+            result["column_stats"],
+            {"SCORE": {"max_abs_diff": 0.5, "mean_signed_diff": 0.5}},
+        )
+
+    def test_column_stats_are_empty_when_rows_cannot_be_aligned(self):
+        sas = pd.DataFrame({"SCORE": [1.0]})
+
+        result = compare_detailed(sas.copy(), sas, key="PROVIDER_ID")
+
+        self.assertEqual(result["column_stats"], {})
+
+    def test_column_stats_can_be_saved_as_strict_json(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [1.0, 2.0],
+            "EMPTY": [float("nan"), float("nan")],
+        })
+
+        result = compare_detailed(sas.copy(), sas, key="PROVIDER_ID")
+
+        json.dumps(result["column_stats"], allow_nan=False)
+
+    def test_column_stats_skip_infinite_values_but_the_row_still_fails(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [1.0, 2.0],
+        })
+
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [float("inf"), 2.5],
+        })
+
+        result = compare_detailed(py, sas, key="PROVIDER_ID")
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["mismatches"]["SCORE"]["count"], 2)
+        self.assertEqual(
+            result["column_stats"]["SCORE"],
+            {"max_abs_diff": 0.5, "mean_signed_diff": 0.5},
+        )
+
+    def test_compare_report_shows_column_stats(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [1.0, 2.0],
+        })
+
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": [1.5, 2.5],
+        })
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            compare(py, sas, key="PROVIDER_ID")
+
+        self.assertIn("SCORE: max difference 0.5, mean signed difference 0.5", output.getvalue())
 
     def test_duplicate_python_ids_fail(self):
         sas = pd.DataFrame({
