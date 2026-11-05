@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pandas as pd
 from src import translator
@@ -22,6 +22,33 @@ class FakeTranslator:
 
 
 class TranslatorTests(unittest.TestCase):
+    def test_repair_prompt_contains_previous_code_sas_and_feedback(self):
+        client = MagicMock()
+        client.models.generate_content.return_value.text = json.dumps({
+            "grp_score_macro": "def grp_score(df, varlist): return df",
+        })
+        with patch.object(translator.genai, "Client", return_value=client):
+            service = translator.GeminiSASTranslator(api_key="fake-key")
+        steps = [{"id": "grp_score_macro", "sas_code": "%macro grp_score;"}]
+        previous = {"grp_score_macro": "old code"}
+        feedback = {"OUTCOME_SAFETY": {"passed": False, "mismatches": {"score": {"count": 2}}}}
+        repaired = service.repair_program1(steps, previous, feedback)
+        prompt = json.loads(client.models.generate_content.call_args.kwargs["contents"])
+        self.assertEqual(prompt["steps"], steps)
+        self.assertEqual(prompt["previous_code"], previous)
+        self.assertEqual(prompt["validation_feedback"], feedback)
+        self.assertIn("grp_score_macro", repaired)
+
+    def test_repair_rejects_invalid_response(self):
+        service = translator.GeminiSASTranslator.__new__(translator.GeminiSASTranslator)
+        service.client = MagicMock()
+        service.model_name = "fake"
+        for response in ({}, {"macro": ""}, {"macro": 42}, []):
+            with self.subTest(response=response):
+                service.client.models.generate_content.return_value.text = json.dumps(response)
+                with self.assertRaises(ValueError):
+                    service.repair_program1([{"id": "macro"}], {}, {})
+
     def test_missing_output_does_not_reuse_previous_group(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
