@@ -1,13 +1,23 @@
 import streamlit as st
 import pandas as pd
-from src.program1_integration import run_reviewed_program1
+from src.program1_integration import DEFAULT_CODE_DIR, run_reviewed_program1
 import json
+import os
+from dotenv import load_dotenv
 from google import genai
 
 
 st.set_page_config(layout="wide")
 # Add a title to your app
 st.title("Program 1 Demo")
+
+REVIEWED_FILES = ["grp_score_macro", "om", "or", "os", "process", "ptexp"]
+if not all((DEFAULT_CODE_DIR / f"{name}.py").is_file() for name in REVIEWED_FILES):
+    st.error(
+        "The translated code is missing. Run `python -m src.program1_integration`, "
+        "read the code, and then reload this page."
+    )
+    st.stop()
 
 col1, col2, = st.columns(2)
 
@@ -170,7 +180,24 @@ for output_table, output_result in result["outputs"].items():
                     use_container_width=True,
                 )
 
-client = genai.Client(api_key=st.secrets["api_key"])
+def get_api_key():
+    """Use the same GEMINI_API_KEY as the translator. Hosted apps can use Streamlit secrets."""
+    load_dotenv()
+    key = os.environ.get("GEMINI_API_KEY")
+    if key:
+        return key
+    try:
+        return st.secrets["api_key"]
+    except Exception:  # Streamlit raises when there is no secrets file.
+        return None
+
+
+api_key = get_api_key()
+if not api_key:
+    st.info("Add GEMINI_API_KEY to your .env file to see the AI analysis.")
+    st.stop()
+
+client = genai.Client(api_key=api_key)
 
 @st.cache_data
 def get_table_analysis(data_json):

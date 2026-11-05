@@ -1,5 +1,10 @@
-"""Connect Program 1 translation, execution, and SAS validation."""
+"""Connect Program 1 translation, execution, and SAS validation.
 
+Command line: python -m src.program1_integration
+This asks Gemini for the Program 1 code and saves it. It does not run the code.
+"""
+
+import argparse
 from pathlib import Path
 from typing import List
 
@@ -162,3 +167,20 @@ def run_reviewed_program1(
         sas_output_dir=sas_output_dir,
         on_error=on_error,
     )
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Ask Gemini for the Program 1 code and save it.")
+    parser.add_argument("--code-dir", default=DEFAULT_CODE_DIR, help="where to save the code")
+    args = parser.parse_args(argv)
+
+    # Imported here so the rest of this module doesn't need the Gemini client.
+    from src.translator import GeminiSASTranslator
+
+    files = generate_program1_code(GeminiSASTranslator(), args.code_dir)
+    print(f"Saved {len(files)} files to {args.code_dir}")
+    print("Read the code before you run it. It runs with full access to your computer.")
+
+
+if __name__ == "__main__":
+    main()

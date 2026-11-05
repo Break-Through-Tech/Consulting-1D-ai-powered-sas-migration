@@ -4,3 +4,5 @@ pandas
 numpy
 httpx
 pyreadstat
+python-dotenv
+streamlit
