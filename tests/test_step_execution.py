@@ -388,5 +388,42 @@ class StepExecutionTests(unittest.TestCase):
         )
 
 
+    def test_skipped_step_cannot_promise_runtime_variable(self):
+        plan = [{
+            "id": "context_setup",
+            "kind": "context",
+            "action": "skip",
+            "depends_on": [],
+            "macro_vars": {
+                "run_date": "runtime (set in this step)"
+            },
+        }]
+
+        with self.assertRaisesRegex(
+            OrchestrationConfigError,
+            "context_setup.*skipped.*run_date",
+        ):
+            run_step_plan(
+                plan,
+                lambda current, macros, datasets: {},
+            )
+
+    def test_rejects_placeholder_returned_as_value(self):
+        plan = [step("producer")]
+
+        with self.assertRaisesRegex(
+            OrchestrationConfigError,
+            "producer.*unresolved.*measure_in",
+        ):
+            run_step_plan(
+                plan,
+                lambda current, macros, datasets: {
+                    "macro_vars": {
+                        "measure_in": "runtime (set by producer)"
+                    }
+                },
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
