@@ -286,7 +286,13 @@ def parse_program(sas_path, macros_path=MACROS_FILE, globals_paths=()):
             "inputs": inputs,
             "outputs": outputs,
             "macros_called": called,
-            "macro_vars": {v: mv.describe(v, set_here) for v in used}
+            "macro_vars": {
+                v: mv.describe(v, set_here)
+                for v in dict.fromkeys([
+                    *used,
+                    *(v for block in bl for v in block.vars_set),
+                ])
+            }
                           if item["kind"] != "context" else
                           {k: (mv.resolve(val) if val is not None else "runtime")
                            for b in bl for k, val in b.vars_set.items()},
