@@ -75,6 +75,29 @@ def _read_sas_csv(sas_csv, key):
     return pd.read_csv(sas_csv, dtype=dtype)
 
 
+def _column_stats(py_numbers, sas_numbers):
+    """
+    Summarize Python minus SAS for rows where both values are real numbers.
+
+    These never decide pass or fail. They show how close a column is even
+    when it passes, and whether its values lean high (+) or low (-).
+    """
+    comparable = np.isfinite(py_numbers) & np.isfinite(sas_numbers)
+
+    if not comparable.any():
+        return {
+            "max_abs_diff": None,
+            "mean_signed_diff": None,
+        }
+
+    differences = py_numbers[comparable] - sas_numbers[comparable]
+
+    return {
+        "max_abs_diff": float(np.abs(differences).max()),
+        "mean_signed_diff": float(differences.mean()),
+    }
+
+
 def compare_detailed(
     py_df,
     sas_csv,
@@ -124,6 +147,7 @@ def compare_detailed(
         "missing_ids": [],
         "extra_ids": [],
         "mismatches": {},
+        "column_stats": {},
     }
 
     result["missing_columns"] = [
@@ -227,9 +251,12 @@ def compare_detailed(
             pd.api.types.is_numeric_dtype(py_values)
             and pd.api.types.is_numeric_dtype(sas_values)
         ):
+            py_numbers = py_values.to_numpy(dtype=float)
+            sas_numbers = sas_values.to_numpy(dtype=float)
+            result["column_stats"][column] = _column_stats(py_numbers, sas_numbers)
             same = np.isclose(
-                py_values.to_numpy(dtype=float),
-                sas_values.to_numpy(dtype=float),
+                py_numbers,
+                sas_numbers,
                 rtol=rtol,
                 atol=atol,
                 equal_nan=True,
@@ -369,6 +396,16 @@ def compare(
                     mismatch["examples"]
                 )
             )
+
+    if result["column_stats"]:
+        print("\nDifferences by column (Python minus SAS):")
+
+    for column, stats in result["column_stats"].items():
+        print(
+            f"{column}: "
+            f"max difference {stats['max_abs_diff']}, "
+            f"mean signed difference {stats['mean_signed_diff']}"
+        )
 
     print(
         "\nPASS"
