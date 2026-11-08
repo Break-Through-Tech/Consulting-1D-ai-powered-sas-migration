@@ -59,7 +59,7 @@ class RealSasPipelineTests(unittest.TestCase):
 
             # Load the actual CSV files saved by reviewed Program 1.
             reviewed_outputs = {
-                table.lower(): pd.read_csv(
+                table: pd.read_csv(
                     root / "outputs" / f"{table}.csv",
                     dtype={"PROVIDER_ID": str},
                 )
@@ -68,11 +68,11 @@ class RealSasPipelineTests(unittest.TestCase):
 
             self.assertEqual(
                 {
-                    "outcome_mortality",
-                    "outcome_safety",
-                    "outcome_readmission",
-                    "ptexp",
-                    "process",
+                    "OUTCOME_MORTALITY",
+                    "OUTCOME_SAFETY",
+                    "OUTCOME_READMISSION",
+                    "PTEXP",
+                    "PROCESS",
                 },
                 set(reviewed_outputs),
             )

@@ -217,5 +217,49 @@ class FastclusTests(unittest.TestCase):
                                       [5] * 5 + [1] * 5 + [4] * 5 + [2] * 5 + [3] * 5)
 
 
+class GroupOutputNameTests(unittest.TestCase):
+    """Program 2 should accept uppercase and lowercase group output names."""
+
+    def test_uppercase_names_give_the_same_result(self):
+        lower = sas_program1_outputs()
+        upper = {name.upper(): frame for name, frame in lower.items()}
+
+        expected = program2.run(lower)
+        actual = program2.run(upper)
+
+        for name in expected:
+            with self.subTest(name=name):
+                pd.testing.assert_frame_equal(expected[name], actual[name])
+
+    def test_public_functions_accept_uppercase_names(self):
+        upper = {
+            name.upper(): frame
+            for name, frame in sas_program1_outputs().items()
+        }
+
+        program2.summary_scores(upper)
+        program2.report(upper)
+
+    def test_national_average_accepts_uppercase_names(self):
+        lower = sas_program1_outputs()
+        upper = {name.upper(): frame for name, frame in lower.items()}
+
+        star = program2.run(lower)["star_2025jul"]
+
+        pd.testing.assert_frame_equal(
+            program2.national_average(star, lower),
+            program2.national_average(star, upper),
+        )
+
+    def test_names_differing_only_by_case_are_rejected(self):
+        outputs = sas_program1_outputs()
+        name, frame = next(iter(outputs.items()))
+
+        outputs[name.upper()] = frame
+
+        with self.assertRaisesRegex(ValueError, name.lower()):
+            program2.run(outputs)
+
+
 if __name__ == "__main__":
     unittest.main()
