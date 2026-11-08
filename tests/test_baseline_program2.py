@@ -36,7 +36,7 @@ SAS_FASTCLUS = {
 
 
 def assert_matches_sas(df, name):
-    # Compared against the .sas7bdat ground truth; the CSV exports are too rounded.
+    # Compared against the .sas7bdat ground truth.
     pd.testing.assert_frame_equal(df, data_io.load_sas_output(name), check_dtype=False,
                                   check_exact=False, rtol=RTOL, atol=ATOL)
 
@@ -92,6 +92,11 @@ class Program2Tests(unittest.TestCase):
 
     def test_star_passes_project_validator(self):
         result = compare_detailed(self.star, self.sas_star, "PROVIDER_ID")
+        self.assertTrue(result["passed"], result["mismatches"])
+
+    def test_national_average_passes_project_validator(self):
+        # One row and no PROVIDER_ID, so the validator aligns rows by position.
+        result = compare_detailed(self.national, self.sas_national, None)
         self.assertTrue(result["passed"], result["mismatches"])
 
 

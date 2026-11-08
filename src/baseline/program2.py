@@ -18,6 +18,8 @@ Steps:
 Checked against the SAS outputs by tests/test_baseline_program2.py.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 
