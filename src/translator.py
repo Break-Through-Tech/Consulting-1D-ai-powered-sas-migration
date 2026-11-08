@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from urllib import response
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 # Google GenAI SDK
@@ -42,7 +43,9 @@ class TranslationOutput(BaseModel):
 # ---------------------------------------------------------------------------
 class GeminiSASTranslator:
     def __init__(self, api_key: Optional[str] = None):
-        # Uses GEMINI_API_KEY environment variable if api_key is None
+        # Uses GEMINI_API_KEY from the environment or .env if api_key is None.
+        # A key that is already exported wins over .env.
+        load_dotenv(ROOT / ".env")
         self.client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY"))
         self.model_name = "gemini-3.5-flash-lite"
 

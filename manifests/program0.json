@@ -339,7 +339,9 @@
     ],
     "outputs": [],
     "macros_called": [],
-    "macro_vars": {},
+    "macro_vars": {
+      "NOBS": "runtime (set in this step)"
+    },
     "notes": "",
     "kind": "step",
     "translate": true,
@@ -440,7 +442,9 @@
     ],
     "outputs": [],
     "macros_called": [],
-    "macro_vars": {},
+    "macro_vars": {
+      "measure_in_std": "runtime (set in this step)"
+    },
     "notes": "",
     "kind": "step",
     "translate": true,

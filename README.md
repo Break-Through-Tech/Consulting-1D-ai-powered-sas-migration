@@ -1,122 +1,69 @@
-# AI Studio Challenge Project Title
+# AI-Powered SAS Migration
 
-> 💡 **Note for the team:** This is just a template. Update the above title with your AI Studio Challenge Project name. Remove all guidance notes and example text in this template and populate this README with your own content. You can work on this README throughout AI Studio, and get feedback from your AI Studio Coach and Challenge Advisor before finalizing it.  
+Uses Gemini to turn SAS programs into Python, then checks that the Python gives the same results as SAS.
 
----
+- **Partner:** Oregon Health Authority
+- **Program:** Break Through Tech AI Studio, Fall 2026
 
-### 👥 **Team Members**
+## Status
 
-**Example:**
+- **Program 1:** works. 5 real Gemini runs matched SAS on all 5 tables. The largest difference was `1.24e-14`.
+- **Programs 0 and 2:** the AI versions can't run yet. See issue #49.
 
-| Name             | GitHub Handle | Contribution                                                             |
-|------------------|---------------|--------------------------------------------------------------------------|
-| George Pulickan  | @George-Pulickan |          |
-| Hao Li.          | @becomingWise |             |
-| Lizzette Rivera  | @             |             |
-| Pawanjit Birdi   | @             |             |
-| Miguel Garcia    | @miguelagarcia-dev|             |
-| Shane Salvador   | @             |             |
+## Setup
 
----
+You need Python 3.10 or newer.
 
-## 🎯 **Project Highlights**
+```
+git clone https://github.com/Break-Through-Tech/Consulting-1D-ai-powered-sas-migration.git
+cd Consulting-1D-ai-powered-sas-migration
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
 
-**Example:**
+- Open `.env` and add your Gemini API key.
+- Never commit `.env`.
+- The data is already in this repo.
 
-- Developed a machine learning model using `[model type/technique]` to address `[challenge project task]`.
-- Achieved `[key metric or result]`, demonstrating `[value or impact]` for `[host company]`.
-- Generated actionable insights to inform business decisions at `[host company or stakeholders]`.
-- Implemented `[specific methodology]` to address industry constraints or expectations.
+## Run
 
----
+Run these from the main project folder.
 
-## 👩🏽‍💻 **Setup and Installation**
+- **Run the tests** (no key needed):
+  ```
+  python -m unittest discover tests
+  ```
+- **Get code from Gemini** (uses your key):
+  ```
+  python -m src.program1_integration
+  ```
+- **Read that code** in `output/program1_reviewed_code/`. The next step runs it, and it can access your computer.
+- **Run the demo:**
+  ```
+  python -m streamlit run demo/demo_app.py
+  ```
 
-**Provide step-by-step instructions so someone else can run your code and reproduce your results. Depending on your setup, include:**
+## Good to know
 
-* How to clone the repository
-* How to install dependencies
-* How to set up the environment
-* How to access the dataset(s)
-* How to run the notebook or scripts
+- `data/Project_1/SAS Output CSV/` holds exact copies of the SAS results.
+- The original rounded CSVs are in `data/Project_1/archive/`.
+- If a check fails, look at the failing rows. Don't raise the tolerance.
+- More details: `docs/program1_integration.md`
 
----
+## Team
 
-## 🏗️ **Project Overview**
+| Name | GitHub |
+|---|---|
+| George Pulickan | @George-Pulickan |
+| Hao Li | @becomingWise |
+| Lizzette Rivera | @lizzette20 |
+| Pawanjit Birdi | @pb125-sy |
+| Miguel Garcia | @miguelagarcia-dev |
+| Shane Salvador | @devxshane |
+| Amanda Tsai | @amytxc |
 
-**Describe:**
+## License
 
-- How this project is connected to the Break Through Tech AI Program
-- Your AI Studio host company and the project objective and scope
-- The real-world significance of the problem and the potential impact of your work
-
----
-
-## 📊 **Data Exploration**
-
-**You might consider describing the following (as applicable):**
-
-* The dataset(s) used: origin, format, size, type of data
-* Data exploration and preprocessing approaches
-* Insights from your Exploratory Data Analysis (EDA)
-* Challenges and assumptions when working with the dataset(s)
-
-**Potential visualizations to include:**
-
-* Plots, charts, heatmaps, feature visualizations, sample dataset images
-
----
-
-## 🧠 **Model Development**
-
-**You might consider describing the following (as applicable):**
-
-* Model(s) used (e.g., CNN with transfer learning, regression models)
-* Feature selection and Hyperparameter tuning strategies
-* Training setup (e.g., % of data for training/validation, evaluation metric, baseline performance)
-
-
----
-
-## 📈 **Results & Key Findings**
-
-**You might consider describing the following (as applicable):**
-
-* Performance metrics (e.g., Accuracy, F1 score, RMSE)
-* How your model performed
-* Insights from evaluating model fairness
-
-**Potential visualizations to include:**
-
-* Confusion matrix, precision-recall curve, feature importance plot, prediction distribution, outputs from fairness or explainability tools
-
----
-
-## 🚀 **Next Steps**
-
-**You might consider addressing the following (as applicable):**
-
-* What are some of the limitations of your model?
-* What would you do differently with more time/resources?
-* What additional datasets or techniques would you explore?
-
----
-
-## 📝 **License**
-
-Specify how your project can be used by others. Choose an appropriate license and link it here (e.g., MIT, Apache 2.0). Make sure your Challenge Advisor approves of the selected license type. 
-
-**Example:**
-This project is licensed under the MIT License.
-
----
-
-## 📄 **References** (Optional but encouraged)
-
-Cite relevant papers, articles, or resources that supported your project.
-
----
-
-## 🙏 **Acknowledgements** (Optional but encouraged)
-
-Thank your Challenge Advisor, host company representatives, TA, and others who supported your project.
+Not chosen yet.

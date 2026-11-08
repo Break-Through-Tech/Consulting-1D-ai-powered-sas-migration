@@ -12,3 +12,4 @@ secrets.toml
 /output/data/
 # Generated code, data, and reports from Program 1 feedback-loop runs.
 /output/program1_feedback/
+.venv/
