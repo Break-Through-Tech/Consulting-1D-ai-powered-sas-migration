@@ -1,4 +1,4 @@
-"""Verify Program 0 output through the reviewed Program 1 pipeline."""
+"""Verify the real-data pipeline through reviewed Program 1 and Program 2 against SAS."""
 
 import tempfile
 import unittest
@@ -7,12 +7,13 @@ from pathlib import Path
 import pandas as pd
 
 from src import data_io
-from src.baseline import program0
+from src.baseline import program0, program2
 from src.program1_integration import run_reviewed_program1
+from src.validate import compare_detailed
 
 
 class RealSasPipelineTests(unittest.TestCase):
-    def test_program0_to_reviewed_program1(self):
+    def test_program0_to_reviewed_program1_to_program2(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
 
@@ -54,6 +55,50 @@ class RealSasPipelineTests(unittest.TestCase):
                     )
                     self.assertEqual(4566, len(saved))
 
+
+
+            # Load the actual CSV files saved by reviewed Program 1.
+            reviewed_outputs = {
+                table.lower(): pd.read_csv(
+                    root / "outputs" / f"{table}.csv",
+                    dtype={"PROVIDER_ID": str},
+                )
+                for table in report["outputs"]
+            }
+
+            self.assertEqual(
+                {
+                    "outcome_mortality",
+                    "outcome_safety",
+                    "outcome_readmission",
+                    "ptexp",
+                    "process",
+                },
+                set(reviewed_outputs),
+            )
+
+            # Pass those saved outputs into Program 2.
+            program2_outputs = program2.run(reviewed_outputs)
+
+            self.assertEqual(
+                {"star_2025jul", "national_average_2025jul"},
+                set(program2_outputs),
+            )
+
+            # Verify both final outputs against the original SAS results.
+            for name, actual in program2_outputs.items():
+                with self.subTest(program2_output=name):
+                    comparison = compare_detailed(
+                        actual,
+                        data_io.load_sas_output(name),
+                        "PROVIDER_ID"
+                        if name == "star_2025jul"
+                        else None,
+                    )
+                    self.assertTrue(
+                        comparison["passed"],
+                        f"{name}: {comparison}",
+                    )
 
     def test_group_execution_failure_reports_and_continues(self):
         with tempfile.TemporaryDirectory() as temp:
