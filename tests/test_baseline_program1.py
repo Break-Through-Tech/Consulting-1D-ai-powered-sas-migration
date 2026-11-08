@@ -10,7 +10,7 @@ from src.baseline import program0, program1
 
 
 def assert_matches_sas(df, name):
-    # Compared against the .sas7bdat ground truth; the CSV exports are too rounded.
+    # Compared against the .sas7bdat ground truth.
     pd.testing.assert_frame_equal(df, data_io.load_sas_output(name), check_dtype=False,
                                   check_exact=False, rtol=1e-9, atol=1e-9)
 

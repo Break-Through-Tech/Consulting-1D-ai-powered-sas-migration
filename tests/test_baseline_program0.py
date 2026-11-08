@@ -8,12 +8,13 @@ import pandas as pd
 
 from src import data_io
 from src.baseline import program0, program1
+from src.validate import compare_detailed
 
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "measure_groups.json"
 
 
 def assert_matches_sas(df, name):
-    # Compared against the .sas7bdat ground truth; the CSV exports are too rounded.
+    # Compared against the .sas7bdat ground truth.
     pd.testing.assert_frame_equal(df, data_io.load_sas_output(name), check_dtype=False,
                                   check_exact=False, rtol=1e-9, atol=1e-9)
 
@@ -27,6 +28,19 @@ class Program0Tests(unittest.TestCase):
         for name, df in program0.outputs(self.result).items():
             with self.subTest(name=name):
                 assert_matches_sas(df, name)
+
+    def test_outputs_pass_validator(self):
+        keys = {
+            "less100_measure": "measure_name",
+            "measure_average_stddev_2025jul": "_STAT_",
+            "std_data_2025jul_analysis": "PROVIDER_ID",
+        }
+        outputs = program0.outputs(self.result)
+        self.assertEqual(set(outputs), set(keys))
+        for name, df in outputs.items():
+            with self.subTest(name=name):
+                result = compare_detailed(df, data_io.load_sas_output(name), key=keys[name])
+                self.assertTrue(result["passed"], result["mismatches"])
 
     def test_group_measures_match_config(self):
         config = json.loads(CONFIG.read_text())

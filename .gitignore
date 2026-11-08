@@ -7,6 +7,9 @@ __pycache__/
 .env
 .env.*
 !.env.example
+secrets.toml
 /output/program1_reviewed_code/
 /output/data/
+# Generated code, data, and reports from Program 1 feedback-loop runs.
+/output/program1_feedback/
 .venv/

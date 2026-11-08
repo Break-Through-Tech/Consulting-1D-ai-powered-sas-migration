@@ -6,7 +6,7 @@ Checks:
 2. Missing and unexpected columns
 3. Exact column order
 4. Missing, blank, and duplicate key values
-5. Row alignment by key
+5. Row alignment by key, or by row position when key=None
 6. Cell values using explicit numeric tolerance
 7. SAS-style text quirks such as padded text and blank = missing
 """
@@ -15,12 +15,10 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_RTOL = 1e-6
+# The references are exact, so correct output only differs by floating-point
+# noise. If a check fails, look at the failing rows instead of raising these (#40).
+DEFAULT_RTOL = 1e-9
 DEFAULT_ATOL = 1e-12
-# Exact .sas7bdat references only differ by floating-point noise, so they
-# can use a much tighter tolerance than rounded CSV exports.
-SAS7BDAT_RTOL = 1e-9
-SAS_CSV_ATOL = 5e-7
 
 
 def clean(df):
@@ -40,6 +38,11 @@ def clean(df):
     return df
 
 
+# Temporary key for tables with no identifying column, such as the one-row
+# national averages. It holds each row's position.
+ROW_POSITION_KEY = "_ROW_POSITION_"
+
+
 def _read_sas_csv(sas_csv, key):
     """
     Read a SAS reference CSV while preserving the key column as text.
@@ -47,6 +50,9 @@ def _read_sas_csv(sas_csv, key):
     This prevents identifiers such as 001234 from being converted to
     integers and losing their leading zeros.
     """
+    if key is None:
+        return pd.read_csv(sas_csv)
+
     key_upper = key.strip().upper()
 
     header = pd.read_csv(sas_csv, nrows=0)
@@ -74,15 +80,19 @@ def compare_detailed(
     sas_csv,
     key,
     rtol=None,
-    atol=None,
+    atol=DEFAULT_ATOL,
 ):
     """
     Compare Python output against a SAS reference CSV.
 
     Returns structured validation details so callers such as the
     orchestration pipeline can determine why validation failed.
+
+    `key` names the column that identifies each row. Use key=None for a
+    table with no such column, which compares rows by position.
     """
-    key = key.strip().upper()
+    if key is not None:
+        key = key.strip().upper()
 
     py = clean(py_df)
     
@@ -90,22 +100,15 @@ def compare_detailed(
     # or a path to a SAS CSV export.
     if isinstance(sas_csv, pd.DataFrame):
         sas = clean(sas_csv)
-        if rtol is None:
-            rtol = SAS7BDAT_RTOL
-        if atol is None:
-            atol = DEFAULT_ATOL
     else:
         sas = clean(_read_sas_csv(sas_csv, key))
-        if rtol is None:
-            rtol = DEFAULT_RTOL
-        if atol is None:
-            atol = SAS_CSV_ATOL
 
     if rtol is None:
-        rtol = SAS7BDAT_RTOL if isinstance(sas_csv, pd.DataFrame) else DEFAULT_RTOL
+        rtol = DEFAULT_RTOL
 
     result = {
         "passed": False,
+        "key_found": True,
         "row_count_match": len(py) == len(sas),
         "python_rows": len(py),
         "sas_rows": len(sas),
@@ -135,8 +138,17 @@ def compare_detailed(
         if column not in sas.columns
     ]
 
+    if key is None:
+        key = ROW_POSITION_KEY
+        # Never overwrite a real column that has the same name.
+        while key in py.columns or key in sas.columns:
+            key = f"_{key}"
+        py[key] = range(len(py))
+        sas[key] = range(len(sas))
+
     # We cannot safely align rows if the key column is missing.
     if key not in py.columns or key not in sas.columns:
+        result["key_found"] = False
         return result
 
     # Compare identifiers as text.
@@ -270,7 +282,7 @@ def compare(
     sas_csv,
     key,
     tol=None,
-    atol=None,
+    atol=DEFAULT_ATOL,
 ):
     """
     Print a readable validation report and return True or False.
@@ -290,6 +302,9 @@ def compare(
         f"Rows: python={result['python_rows']}, "
         f"sas={result['sas_rows']}"
     )
+
+    if not result["key_found"]:
+        print(f"Key column {key} is not in both tables.")
 
     if not result["column_order_match"]:
         print("Column order does not match SAS output.")
