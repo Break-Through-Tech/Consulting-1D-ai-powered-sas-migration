@@ -503,3 +503,291 @@ def run_program1(
         "steps": step_results,
         "outputs": output_results,
     }
+
+
+def build_step_plan(manifest_path):
+    """Build an ordered plan for a general SAS program manifest.
+
+    Unlike build_program1_plan, this supports ordinary SAS steps
+    without enforcing Program 1's measure-group requirements.
+    """
+    steps = _load_json(manifest_path)
+
+    if not isinstance(steps, list):
+        raise OrchestrationConfigError(
+            "Step manifest must contain a list of steps."
+        )
+
+    allowed_kinds = ALLOWED_KINDS | {"step"}
+    seen_ids = set()
+    plan = []
+
+    for step in steps:
+        if not isinstance(step, dict):
+            raise OrchestrationConfigError(
+                "Every manifest step must be an object."
+            )
+
+        step_id = step.get("id")
+        if not isinstance(step_id, str) or not step_id.strip():
+            raise OrchestrationConfigError(
+                "Every manifest step must have a non-empty string id."
+            )
+
+        if step_id in seen_ids:
+            raise OrchestrationConfigError(
+                f"Duplicate step id: {step_id}"
+            )
+
+        missing = ORCHESTRATION_FIELDS - set(step)
+        if missing:
+            raise OrchestrationConfigError(
+                f"{step_id}: missing fields {sorted(missing)}"
+            )
+
+        kind = step["kind"]
+        if kind not in allowed_kinds:
+            raise OrchestrationConfigError(
+                f"{step_id}: unsupported kind {kind!r}"
+            )
+
+        translate = step["translate"]
+        if type(translate) is not bool:
+            raise OrchestrationConfigError(
+                f"{step_id}: translate must be true or false."
+            )
+
+        if kind == "context" and translate:
+            raise OrchestrationConfigError(
+                f"{step_id}: context steps cannot be translated."
+            )
+
+        dependencies = step["depends_on"]
+        if not isinstance(dependencies, list):
+            raise OrchestrationConfigError(
+                f"{step_id}: depends_on must be a list."
+            )
+
+        if any(
+            not isinstance(dep, str) or not dep.strip()
+            for dep in dependencies
+        ):
+            raise OrchestrationConfigError(
+                f"{step_id}: invalid dependency id."
+            )
+
+        if len(dependencies) != len(set(dependencies)):
+            raise OrchestrationConfigError(
+                f"{step_id}: duplicate dependencies."
+            )
+
+        unavailable = [
+            dep for dep in dependencies if dep not in seen_ids
+        ]
+        if unavailable:
+            raise OrchestrationConfigError(
+                f"{step_id}: dependencies must appear earlier: "
+                f"{unavailable}"
+            )
+
+        macro_vars = step.get("macro_vars", {})
+        if not isinstance(macro_vars, dict):
+            raise OrchestrationConfigError(
+                f"{step_id}: macro_vars must be an object."
+            )
+
+        planned_step = dict(step)
+        planned_step["action"] = (
+            "translate" if translate else "skip"
+        )
+
+        plan.append(planned_step)
+        seen_ids.add(step_id)
+
+    return plan
+
+
+def run_step_plan(
+    plan,
+    execute_step,
+    initial_macro_vars=None,
+    initial_datasets=None,
+):
+    """Run a general step plan using a caller-provided callback.
+
+    Tracks macro variables and datasets across steps.
+    Does not automatically execute generated Python code.
+    """
+    macro_vars = dict(initial_macro_vars or {})
+    datasets = dict(initial_datasets or {})
+    completed = set()
+
+    for step in plan:
+        step_id = step["id"]
+
+        # Verify that explicit step dependencies have completed.
+        missing_dependencies = [
+            dependency
+            for dependency in step.get("depends_on", [])
+            if dependency not in completed
+        ]
+
+        if missing_dependencies:
+            raise OrchestrationConfigError(
+                f"{step_id}: missing completed dependencies: "
+                f"{missing_dependencies}"
+            )
+
+        # Distinguish actual macro values from placeholders.
+        must_set = []
+
+        for name, value in step.get("macro_vars", {}).items():
+            if isinstance(value, str):
+                description = value.strip().lower()
+
+                if description == "macro parameter":
+                    continue
+
+                if description.startswith("runtime ("):
+                    if "set in this step" in description:
+                        must_set.append(name)
+                    elif name not in macro_vars:
+                        raise OrchestrationConfigError(
+                            f"{step_id}: unresolved runtime "
+                            f"macro variable {name!r}"
+                        )
+                    continue
+
+            macro_vars[name] = value
+
+        # Context steps may define variables without executing.
+        if step.get("action") == "skip":
+            if must_set:
+                raise OrchestrationConfigError(
+                    f"{step_id}: skipped step cannot produce "
+                    f"declared runtime macro variables: {must_set}"
+                )
+
+            completed.add(step_id)
+            continue
+
+        # Verify all required input datasets are available.
+        # Macro definitions are translated now but their dataset
+        # parameters are resolved when the macro is called.
+        missing_inputs = (
+            [
+                name
+                for name in step.get("inputs", [])
+                if name not in datasets
+            ]
+            if step.get("kind") != "macro"
+            else []
+        )
+
+        if missing_inputs:
+            raise OrchestrationConfigError(
+                f"{step_id}: missing input datasets: "
+                f"{missing_inputs}"
+            )
+
+        # Execution is delegated to the caller.
+        result = execute_step(
+            step,
+            dict(macro_vars),
+            dict(datasets),
+        )
+
+        if result is None:
+            result = {}
+
+        if not isinstance(result, dict):
+            raise OrchestrationConfigError(
+                f"{step_id}: execution result must be a dictionary."
+            )
+
+        # Reject misspelled or unsupported result keys.
+        unexpected_keys = sorted(
+            set(result) - {"macro_vars", "datasets"}
+        )
+
+        if unexpected_keys:
+            raise OrchestrationConfigError(
+                f"{step_id}: unexpected execution result keys: "
+                f"{unexpected_keys}"
+            )
+
+        updated_macros = result.get("macro_vars", {})
+        updated_datasets = result.get("datasets", {})
+
+        if not isinstance(updated_macros, dict):
+            raise OrchestrationConfigError(
+                f"{step_id}: returned macro_vars must be a dictionary."
+            )
+
+        if not isinstance(updated_datasets, dict):
+            raise OrchestrationConfigError(
+                f"{step_id}: returned datasets must be a dictionary."
+            )
+
+        # A producer must return the variables it promises to set.
+        not_set = [
+            name
+            for name in must_set
+            if name not in updated_macros
+        ]
+
+        if not_set:
+            raise OrchestrationConfigError(
+                f"{step_id}: declared runtime macro variables "
+                f"were not returned: {not_set}"
+            )
+
+        # A producer must return its declared output datasets.
+        # A macro definition does not produce its declared datasets.
+        # Those outputs belong to later macro invocations.
+        declared_outputs = (
+            []
+            if step.get("kind") == "macro"
+            else step.get("outputs", [])
+        )
+
+        if not isinstance(declared_outputs, list):
+            raise OrchestrationConfigError(
+                f"{step_id}: outputs must be a list."
+            )
+
+        missing_outputs = [
+            name
+            for name in declared_outputs
+            if name not in updated_datasets
+        ]
+
+        if missing_outputs:
+            raise OrchestrationConfigError(
+                f"{step_id}: declared output datasets "
+                f"were not returned: {missing_outputs}"
+            )
+
+        # Prevent runtime placeholder text being returned as a value.
+        unresolved_returns = [
+            name
+            for name, value in updated_macros.items()
+            if isinstance(value, str)
+            and value.strip().lower().startswith("runtime (")
+        ]
+
+        if unresolved_returns:
+            raise OrchestrationConfigError(
+                f"{step_id}: returned unresolved macro variables: "
+                f"{unresolved_returns}"
+            )
+
+        # Only update shared state after successful validation.
+        macro_vars.update(updated_macros)
+        datasets.update(updated_datasets)
+        completed.add(step_id)
+
+    return {
+        "macro_vars": macro_vars,
+        "datasets": datasets,
+    }
