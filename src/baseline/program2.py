@@ -77,8 +77,29 @@ NATIONAL_GROUP_AVERAGES = {
 }
 
 
+def _normalize_group_outputs(group_outputs):
+    """Accept group output names regardless of capitalization.
+
+    Reject duplicates that differ only by case.
+    """
+    normalized = {}
+
+    for name, frame in group_outputs.items():
+        key = name.lower()
+
+        if key in normalized:
+            raise ValueError(
+                f"Duplicate group output name (case-insensitive): {key}"
+            )
+
+        normalized[key] = frame
+
+    return normalized
+
+
 def summary_scores(group_outputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """DATA all and DATA summary_score: group scores, weights and the summary score."""
+    group_outputs = _normalize_group_outputs(group_outputs)
     # MERGE ... BY provider_id, keeping only grp_score from each table.
     out = pd.concat([group_outputs[table].set_index(KEY)["grp_score"].rename(score)
                      for table, score in SCORE_COLUMNS.items()], axis=1).sort_index().reset_index()
@@ -107,6 +128,7 @@ def report(group_outputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     has already done that same count (total_cnt), so we read it from there and
     program 2 needs nothing but the program 1 tables.
     """
+    group_outputs = _normalize_group_outputs(group_outputs)
     counts = pd.concat([group_outputs[table].set_index(KEY)["total_cnt"].rename(count)
                         for table, count in COUNT_COLUMNS.items()], axis=1).sort_index()
 
@@ -198,6 +220,7 @@ def kmeans(scores: np.ndarray) -> np.ndarray:
 
 def national_average(star: pd.DataFrame, group_outputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """%nation_avg0, %nation_avg_peer and %nation_avg, merged into a single row."""
+    group_outputs = _normalize_group_outputs(group_outputs)
     reporting = star[star["report_indicator"] == 1]
 
     # %nation_avg0 and %nation_avg_peer: mean summary score of reporting hospitals,
@@ -219,6 +242,7 @@ def run(group_outputs: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 
     Takes program 1's outputs, keyed the same way (program1.run or the SAS tables).
     """
+    group_outputs = _normalize_group_outputs(group_outputs)
     # MERGE summary_score1 report_indicator; BY provider_id.
     star = summary_scores(group_outputs).merge(report(group_outputs), on=KEY, how="outer", sort=True)
 
