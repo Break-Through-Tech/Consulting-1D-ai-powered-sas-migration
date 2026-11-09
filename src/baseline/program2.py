@@ -205,6 +205,12 @@ def fastclus(scores: np.ndarray, seeds: np.ndarray, strict: float | None = None)
     return centers, np.abs(scores[:, np.newaxis] - centers[np.newaxis, :]).argmin(axis=1)
 
 
+def stars_by_cluster(cluster_means: np.ndarray) -> np.ndarray:
+    """The star for each cluster: clusters ranked by mean, lowest = 1, highest = 5."""
+    # SAS sorts the cluster means and numbers them with _n_.
+    return cluster_means.argsort().argsort() + 1
+
+
 def kmeans(scores: np.ndarray) -> np.ndarray:
     """%kmeans: star rating (1-5) for every hospital in one peer group."""
     # Step 1: run to full convergence from the quintile medians.
@@ -213,9 +219,7 @@ def kmeans(scores: np.ndarray) -> np.ndarray:
     # Step 2: run again from those means, with strict=1 to limit the effect of outliers.
     cluster_means, clusters = fastclus(scores, first_pass_means, strict=STRICT)
 
-    # Rank the clusters by mean: the lowest mean is star 1, the highest is star 5.
-    stars_by_cluster = cluster_means.argsort().argsort() + 1
-    return stars_by_cluster[clusters].astype(float)
+    return stars_by_cluster(cluster_means)[clusters].astype(float)
 
 
 def national_average(star: pd.DataFrame, group_outputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
