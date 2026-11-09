@@ -119,12 +119,26 @@ class Program1IntegrationTests(unittest.TestCase):
                         for step in steps}
 
         reviews = []
-        result = self.feedback_run(
-            RepairTranslator(), review_code=lambda files: reviews.append(files) or True,
-        )
+
+        def review(files):
+            reviews.append({step_id: path.read_text(encoding="utf-8")
+                            for step_id, path in files.items()})
+            self.assertEqual(set(files), {"grp_score_macro", "om", "os", "or", "ptexp", "process"})
+            self.assertTrue(all(f"attempt_{len(reviews)}" in path.parts
+                                for path in files.values()))
+            return True
+
+        result = self.feedback_run(RepairTranslator(), review_code=review)
         self.assertTrue(result["passed"])
         self.assertEqual(len(result["attempts"]), 2)
         self.assertEqual(len(reviews), 2)
+        self.assertEqual(reviews[0]["grp_score_macro"], FakeTranslator.MACRO_CODE.replace(
+            ".sum(axis=1)", ".sum(axis=1) + 1"))
+        self.assertEqual(reviews[1]["grp_score_macro"], FakeTranslator.MACRO_CODE)
+        for reviewed in reviews:
+            self.assertEqual({code for step_id, code in reviewed.items()
+                              if step_id != "grp_score_macro"},
+                             {"out_df = grp_score(input_df, measures)"})
         self.assertEqual(len(result["outputs"]), 5)
 
     def test_feedback_stops_at_attempt_limit(self):
@@ -150,14 +164,24 @@ class Program1IntegrationTests(unittest.TestCase):
         self.assertEqual(result["attempts"], [])
         self.assertFalse((self.root / "feedback" / "attempt_1" / "data").exists())
 
-    def test_feedback_stops_on_execution_error(self):
+    def test_feedback_stops_on_execution_error_with_other_validation_mismatches(self):
         class BrokenTranslator(FakeTranslator):
-            def translate_group_step(self, step, measures):
-                return "raise ValueError('broken code')"
+            def translate_macro(self, step):
+                return self.MACRO_CODE.replace(".sum(axis=1)", ".sum(axis=1) + 1")
 
-        result = self.feedback_run(BrokenTranslator())
-        self.assertFalse(result["passed"])
+            def translate_group_step(self, step, measures):
+                if step["id"] == "os":
+                    return "raise ValueError('broken code')"
+                return super().translate_group_step(step, measures)
+
+        service = BrokenTranslator()
+        service.repair_program1 = MagicMock()
+        result = self.feedback_run(service)
+        self.assertEqual(result["status"], "FAIL")
         self.assertEqual(len(result["attempts"]), 1)
+        self.assertEqual(result["outputs"]["OUTCOME_SAFETY"]["status"], "ERROR")
+        self.assertEqual(result["outputs"]["OUTCOME_MORTALITY"]["status"], "FAIL")
+        service.repair_program1.assert_not_called()
 
     def test_feedback_rejects_invalid_limit(self):
         for limit in (0, -1, True, 1.5):
@@ -223,15 +247,16 @@ class Program1IntegrationTests(unittest.TestCase):
 
     def test_feedback_single_attempt_does_not_call_repair(self):
         class NoRepairTranslator(FakeTranslator):
-            def translate_macro(inner, step):
-                return inner.MACRO_CODE.replace(".sum(axis=1)", ".sum(axis=1) + 1")
+            def translate_macro(self, step):
+                return self.MACRO_CODE.replace(".sum(axis=1)", ".sum(axis=1) + 1")
 
-            def repair_program1(inner, *args):
-                self.fail("No repair allowed with max_attempts=1")
-
-        result = self.feedback_run(NoRepairTranslator(), max_attempts=1)
-        self.assertFalse(result["passed"])
+        service = NoRepairTranslator()
+        service.repair_program1 = MagicMock()
+        result = self.feedback_run(service, max_attempts=1)
+        self.assertEqual(result["status"], "FAIL")
         self.assertEqual(len(result["attempts"]), 1)
+        self.assertEqual(result["outputs"]["OUTCOME_MORTALITY"]["status"], "FAIL")
+        service.repair_program1.assert_not_called()
 
     def test_feedback_rejects_incomplete_repair_before_execution(self):
         class InvalidRepair(FakeTranslator):
@@ -470,17 +495,90 @@ class Program1IntegrationTests(unittest.TestCase):
     def test_feedback_preserves_history_on_repair_file_write_error(self):
         service = self.repair_service()
         service.client.models.generate_content.return_value = self.repair_response()
-        original_write = Path.write_text
+        original_write = Path.write_bytes
 
         def write_candidate(path, *args, **kwargs):
             if "attempt_2" in path.parts:
                 raise PermissionError("cannot save repair")
             return original_write(path, *args, **kwargs)
 
-        with patch.object(Path, "write_text", autospec=True, side_effect=write_candidate):
+        with patch.object(Path, "write_bytes", autospec=True, side_effect=write_candidate):
             result = self.feedback_run(service)
         self.assert_repair_error_history(result)
         self.assertEqual(result["error"]["type"], "PermissionError")
+
+    def assert_crlf_repair_preserved(self, corrected_macro):
+        wrong_macro = FakeTranslator.MACRO_CODE.replace(".sum(axis=1)", ".sum(axis=1) + 1")
+
+        class RepairTranslator(FakeTranslator):
+            def translate_macro(self, step):
+                return wrong_macro
+
+            def repair_program1(self, steps, previous_code, feedback):
+                return {step["id"]: (corrected_macro if step["kind"] == "macro"
+                        else previous_code[step["id"]]) for step in steps}
+
+        # Simulate Windows text-mode newline conversion on every platform.
+        original_write = Path.write_text
+
+        def windows_text_write(path, data, *args, **kwargs):
+            if "attempt_2" in path.parts:
+                return path.write_bytes(data.replace("\n", "\r\n").encode("utf-8"))
+            return original_write(path, data, *args, **kwargs)
+
+        with patch.object(Path, "write_text", autospec=True, side_effect=windows_text_write):
+            result = self.feedback_run(RepairTranslator(), max_attempts=2)
+        self.assertTrue(result["passed"], result)
+        saved = Path(result["code_dir"]) / "grp_score_macro.py"
+        self.assertEqual(saved.read_bytes(), corrected_macro.encode("utf-8"))
+
+    def test_feedback_preserves_crlf_repair_with_line_continuation(self):
+        corrected = FakeTranslator.MACRO_CODE.replace(
+            "df[varlist].sum(axis=1),",
+            "df[varlist].sum(axis=1) + " + "\\" + "\n            0,"
+        ).replace("\n", "\r\n")
+        self.assert_crlf_repair_preserved(corrected)
+
+    def test_feedback_preserves_crlf_repair_with_multiline_string(self):
+        corrected = FakeTranslator.MACRO_CODE.replace(
+            "def grp_score(df, varlist):\n",
+            'def grp_score(df, varlist):\n    note = """first\nsecond"""\n',
+        ).replace(
+            "df[varlist].sum(axis=1),",
+            'df[varlist].sum(axis=1) + (0 if note == "first\\nsecond" else 1),',
+        ).replace("\n", "\r\n")
+        self.assert_crlf_repair_preserved(corrected)
+
+    def test_feedback_repairs_from_executed_snapshot_after_working_file_edit(self):
+        wrong_macro = FakeTranslator.MACRO_CODE.replace(".sum(axis=1)", ".sum(axis=1) + 1")
+        seen = []
+
+        class RepairTranslator(FakeTranslator):
+            def translate_macro(self, step):
+                return wrong_macro
+
+            def repair_program1(self, steps, previous_code, feedback):
+                seen.append(previous_code.copy())
+                return {step["id"]: (FakeTranslator.MACRO_CODE if step["kind"] == "macro"
+                        else previous_code[step["id"]]) for step in steps}
+
+        original_run = run_reviewed_program1
+
+        def edit_after_execution(**kwargs):
+            result = original_run(**kwargs)
+            if "attempt_1" in Path(kwargs["code_dir"]).parts:
+                (Path(kwargs["code_dir"]) / "grp_score_macro.py").write_bytes(
+                    b"raise RuntimeError('edited after execution')"
+                )
+            return result
+
+        with patch("src.program1_integration.run_reviewed_program1", side_effect=edit_after_execution):
+            result = self.feedback_run(RepairTranslator(), max_attempts=2)
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(seen[0]["grp_score_macro"], wrong_macro)
+        first_macro = next(step for step in result["attempts"][0]["steps"]
+                           if step["id"] == "grp_score_macro")
+        self.assertEqual(seen[0]["grp_score_macro"], first_macro["generated_code"])
 
     def test_feedback_invalid_configuration_fails_before_creating_run(self):
         with self.assertRaises(FileNotFoundError):

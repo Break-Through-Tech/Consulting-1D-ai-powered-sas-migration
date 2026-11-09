@@ -28,10 +28,14 @@ human review or approval.
 
 ## Safety
 
-Generated Python is executed using `exec()`, which is not a sandbox.
-Only execute reviewed code in a disposable, isolated environment
-without accessible secrets or unrelated sensitive files.
-Removing API keys from environment variables alone is insufficient.
+Generated Python runs through `exec()`, which is not a sandbox. In the
+feedback loop, it runs in the same process as the Gemini client holding the API
+key.
+
+Review every candidate, including repairs, and reject code that hard-codes SAS
+reference values. Run the whole process in a disposable, isolated
+environment without other secrets or sensitive files; removing an environment
+variable does not remove a key already held by the client.
 
 ## Real-data test results
 
@@ -66,91 +70,116 @@ tolerance.
   pre-execution file errors. The feedback wrapper reports operational errors
   as described below; invalid configuration and run-directory setup errors
   still raise before a run starts.
-- Numerical parity with all five SAS outputs is not yet confirmed.
 
 ## Retry and Error Handling
 
 ### Validation feedback repair (issue #41)
 
 `run_program1_with_feedback(translator, review_code, max_attempts=3,
-run_dir=...)` is an opt-in wrapper around the existing integration.
-Use a new run directory each time. It generates the initial six files,
-calls `review_code(files)` with step IDs mapped to candidate paths, and
-executes only when the callback returns exactly `True`. The callback must
-arrange actual review; do not automatically approve untrusted model output.
-Execution still requires the isolated environment described above.
+run_dir=...)` generates, reviews, executes, and validates Program 1. It asks
+Gemini to repair the code when validation fails, up to the configured attempt
+limit.
 
-Review is synchronous: the callback must complete review and return `True`
-within the same call. Returning anything else stops the run with
-`REVIEW_REQUIRED`; it does not pause it. Resumable review is not supported.
-Calling the wrapper again with the same run directory raises `FileExistsError`
-to protect earlier artifacts. You may execute saved, reviewed files separately
-with `run_reviewed_program1(code_dir=...)`, but this does not resume the feedback
-loop or restore its attempt history. To restart the full loop, choose a new
-run directory and review the newly generated code again.
+#### Run and review
 
-On numerical or structural validation failure, the wrapper sends the existing
-validator's complete failed-output diagnostics and previous Python source to
-`translator.repair_program1()`. Gemini receives the original SAS and measure
-configuration as well. The correction includes the shared macro and failed
-group steps, because a defect in the macro can affect every group. All five
-groups are re-executed and revalidated after review of each correction.
+Use a new `run_dir` for each run. The callback receives step IDs mapped to the
+six candidate file paths on every attempt, including repairs. Inspect each file
+before returning exactly `True` to approve execution:
 
-Outputs with `duplicate_sas_ids` or `blank_sas_keys` are classified as
-non-repairable reference-data failures and listed in `non_repairable_outputs`
-on each completed report. Their original diagnostics remain in `outputs` and
-`attempts`, but they are excluded from Gemini feedback and group repair requests.
-Other failed groups can still be repaired and revalidated. If only invalid
-reference outputs remain, the loop stops with FAIL without another repair call.
+```python
+from src.program1_integration import run_program1_with_feedback
+from src.translator import GeminiSASTranslator
 
-`max_attempts` includes the initial translation. A passing run stops immediately;
-an exhausted run returns its final FAIL result. Runtime errors and blocked
-steps stop the correction loop rather than being treated as numeric mismatches.
-Transient API failures retain the existing bounded network retries.
-Review refusal returns `REVIEW_REQUIRED` without executing that candidate.
-The returned `attempts` list contains validation reports for executed attempts;
-code and CSV outputs are separated under `attempt_1/`, `attempt_2/`, etc.
-Existing entry points and validation tolerances are unchanged.
+def review(files):
+    for step_id, path in files.items():
+        print(step_id, path)
+    # Inspect each listed file before confirming.
+    return input("Type EXECUTE after review: ") == "EXECUTE"
 
-The feedback wrapper returns the same report envelope for PASS, FAIL,
-REVIEW_REQUIRED, and ERROR:
+result = run_program1_with_feedback(
+    GeminiSASTranslator(), review,
+    run_dir="output/program1_feedback/run_001",
+)
+print(result["status"])
+```
 
-- `status` and `passed` describe the overall outcome.
-- `attempt` is the current candidate number, including an unexecuted candidate.
-- `attempts` contains only completed execution/validation reports, each with its
-  own `attempt` number and `code_dir`. It never adds a failed API request as a
-  validation attempt.
-- `steps` and `outputs` retain the latest completed execution/validation report,
-  or are empty when no execution has completed. They describe the last completed
-  candidate, not a correction that failed before execution.
-- `code_dir` identifies the current candidate's directory. It may be absent or
-  partially populated after a generation or repair failure.
-- `error` is `None` unless an operation raises. In that case, status is ERROR
-  and `error` contains `stage`, candidate `attempt`, exception `type`, `message`,
-  request `attempts`, and `cause_type`. For repair failures, request attempts are
-  counted as the translator is invoked, including transient failures before a
-  malformed response or permanent API error. Other stages use the retry
-  exception's count when available, otherwise 1.
+Use the isolated environment described under Safety. Review is synchronous:
+any return value other than `True` stops the run with `REVIEW_REQUIRED` before
+that candidate executes. The loop cannot resume a declined or interrupted run.
 
-Malformed Gemini replies, permanent API errors, and exhausted transient repair
-retries stop the loop with ERROR while preserving every completed report.
-Generation, review callback, and file-operation exceptions use this same
-envelope. Errors already reported by the existing execution pipeline remain
-in the completed report's `steps` and `outputs`, with overall status FAIL.
-Argument/configuration validation and initial run-directory creation remain
-preflight exceptions. The lower-level functions keep their existing exception
-interfaces; process interruptions such as KeyboardInterrupt are not swallowed.
+Reusing `run_dir` raises `FileExistsError` to protect earlier artifacts. To
+restart the loop, choose a new directory and review the newly generated code.
+You can execute saved, reviewed files with `run_reviewed_program1(code_dir=...)`,
+but this does not resume the loop or restore its in-memory reports.
 
-Only the default `output/program1_feedback/` tree is ignored by Git. Keep
-custom run directories inside that tree or outside the repository; arbitrary
-custom directories elsewhere in the repository are not automatically ignored.
-Reports are returned in memory; durable report storage and resume support
-remain separate work.
+#### Repairs and stopping conditions
 
-This implements the bounded correction mechanism discussed in #35 using the
-current validator contract. Future diagnostic additions from #39 will flow
-through automatically. It does not select new numeric tolerances (#40),
-implement general Programs 0/2 orchestration (#49), or add a history database.
+For numerical or structural validation failures, `translator.repair_program1()`
+receives complete failed-output diagnostics, the code that produced them, and
+the original SAS and measure configuration. The code comes from the completed
+execution report, so later working-file edits cannot change the repair request.
+Repaired files preserve the exact UTF-8 code returned by the repair request.
+
+Repairs include the shared macro and failed group steps. After review, all five
+groups run and validate again because macro changes can affect every group.
+
+- `max_attempts` defaults to 3 and includes the initial translation. A passing
+  run stops immediately; reaching the limit returns the final `FAIL` result.
+- Runtime errors and blocked steps stop further repairs, even when other groups
+  have validation mismatches.
+- References with `duplicate_sas_ids` or `blank_sas_keys` are listed in
+  `non_repairable_outputs`. Their diagnostics remain in `outputs` and `attempts`,
+  but are excluded from repair feedback and group repair requests. Other failed
+  groups can still be repaired. If only invalid references remain, the loop
+  stops with `FAIL`.
+- Generation retries each step independently; repair requests have a separate
+  retry limit. Both allow up to three requests for transient API or network
+  failures, with exponential backoff starting at two seconds. Retrying a request
+  does not count as an additional validation attempt.
+
+The loop uses the finalized #40 validation tolerances (`rtol=1e-9`,
+`atol=1e-12`). It handles Program 1; Programs 0 and 2 use separate orchestration.
+Existing lower-level entry points remain available.
+
+#### Reports and errors
+
+All outcomes (`PASS`, `FAIL`, `REVIEW_REQUIRED`, `ERROR`) use the same report
+fields:
+
+| Field | Meaning |
+|---|---|
+| `status`, `passed` | Overall outcome; `passed` is true only for `PASS` |
+| `attempt` | Current candidate number, including candidates not executed |
+| `attempts` | Completed execution/validation reports, each with its own `attempt` and `code_dir` |
+| `steps`, `outputs` | Latest completed report, or empty before any execution completes |
+| `code_dir` | Current candidate directory; it may be absent or partial after generation/repair failure |
+| `error` | `None`, or wrapper error details: `stage`, candidate `attempt`, exception `type`/`message`, request `attempts`, and `cause_type` |
+
+Failed API requests are not added to `attempts`. If a new candidate fails before
+execution completes, `steps` and `outputs` retain the last completed report.
+For repair errors, `error["attempts"]` counts all translator calls, including
+transient failures before a malformed reply or permanent error. Other stages
+use the retry exception's count when available, otherwise 1.
+
+Malformed replies, permanent API errors, exhausted retries, review callback
+exceptions, and file-operation errors return `ERROR` while retaining completed
+reports. Errors collected by the execution pipeline remain in its `steps` and
+`outputs` with overall `FAIL`.
+
+Invalid arguments/configuration and initial run-directory creation raise before
+work starts. Lower-level functions keep their existing exception behavior.
+Process interruptions such as `KeyboardInterrupt` are not caught.
+
+#### Saved files and recovery
+
+Code and CSVs are kept in separate `attempt_1/`, `attempt_2/`, etc. directories.
+Reports remain in memory; durable report storage and loop resumption are not
+implemented. Inspect the reports and partial files before starting another run.
+
+Git ignores the default `output/program1_feedback/` tree. Keep custom runs under
+that tree or outside the repository, or add appropriate ignore rules.
+
+### Lower-level retries and reporting
 
 Lower-level translation (without the feedback wrapper):
 - Temporary API failures (429, 5xx) and network errors are retried.

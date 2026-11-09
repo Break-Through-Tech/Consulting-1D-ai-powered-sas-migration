@@ -100,7 +100,7 @@ def run_program1_with_feedback(
                 files = {}
                 for step_id, code in {**previous_code, **repaired}.items():
                     path = code_dir / f"{step_id}.py"
-                    path.write_text(code, encoding="utf-8")
+                    path.write_bytes(code.encode("utf-8"))
                     files[step_id] = path
 
             stage = "review"
@@ -134,8 +134,8 @@ def run_program1_with_feedback(
             # A shared macro change can affect every group, so rerun all groups.
             repair_steps = [step for step in plan
                             if step["kind"] == "macro" or step["id"] in failed_ids]
-            previous_code = {step_id: path.read_text(encoding="utf-8")
-                             for step_id, path in files.items()}
+            previous_code = {step["id"]: step["generated_code"]
+                             for step in result["steps"] if "generated_code" in step}
             feedback = {table: output["validation"]
                         for table, output in result["outputs"].items()
                         if output["status"] == "FAIL" and table not in invalid_references}
