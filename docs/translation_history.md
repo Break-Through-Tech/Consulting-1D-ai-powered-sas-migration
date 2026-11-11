@@ -219,9 +219,10 @@ The automatically combined code provides partial history for the feedback loop:
   not recorded in a persistent loop report. The wrapper's returned `attempts`
   and final status remain in memory.
 - The wrapper does not accept `history_store`, provide a persistent loop ID
-  linking attempt runs, or preserve exact line endings through its repair-file
-  reads/writes. The exact-code guarantees above apply to the lower-level
-  generation and reviewed-execution functions.
+  linking attempt runs. Repaired files are written as exact UTF-8 bytes and
+  repair requests use the code that actually ran, but the history guarantees
+  above apply only to the lower-level generation and reviewed-execution
+  functions.
 
 Complete feedback-loop persistence remains deferred. It would require recording
 repairs before review, preserving candidate lineage and unchanged dependencies,

@@ -40,7 +40,11 @@ for how review edits and original snapshots are preserved.
 Generated Python runs through `exec()`, which is not a sandbox. Execute only
 reviewed code in a disposable, isolated environment without accessible secrets
 or unrelated sensitive files. Removing an API key from the environment alone
-does not provide isolation.
+does not provide isolation. In the feedback loop, generated code runs in the
+same process as the Gemini client holding the API key, so review every
+candidate, including repairs, and reject code that hard-codes SAS reference
+values. Removing an environment variable does not remove a key the client
+already holds.
 
 ### 3. Execute reviewed code
 
@@ -70,7 +74,8 @@ generation metadata.
 
 `run_program1_with_feedback()` from issue #41 / PR #54 is available in this
 combined branch. It generates, reviews, executes, and validates candidates, then
-asks Gemini to repair validation mismatches within a fixed attempt limit.
+asks Gemini to repair validation mismatches within a fixed attempt limit. It
+handles Program 1 only; Programs 0 and 2 use separate orchestration.
 
 ```python
 from src.program1_integration import run_program1_with_feedback
@@ -104,8 +109,11 @@ the review callback must arrange actual review, not automatically approve code.
 - `max_attempts` includes the initial candidate. A passing run stops immediately;
   reaching the limit returns the final `FAIL`.
 - On validation failure, `translator.repair_program1()` receives failed-output
-  diagnostics and previous Python code, along with the original SAS and measure
-  configuration. Repairs include the shared macro and failed group steps. After
+  diagnostics and the Python code that was actually executed, taken from the
+  completed execution report, so later edits to working files cannot change the
+  repair request. It also receives the original SAS and measure configuration.
+  Repaired files are saved as the exact UTF-8 bytes the repair returned, with no
+  newline conversion. Repairs include the shared macro and failed group steps. After
   review, all five groups run again to detect regressions from macro changes.
 - References with `duplicate_sas_ids` or `blank_sas_keys` are listed in
   `non_repairable_outputs`. Their diagnostics remain in the reports, but they
