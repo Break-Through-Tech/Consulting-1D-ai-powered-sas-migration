@@ -211,10 +211,16 @@ class FastclusTests(unittest.TestCase):
         self.assertEqual(centers[0], 2.25)
 
     def test_stars_rank_clusters_by_mean(self):
-        # Five tight, well separated clusters listed out of order.
+        # Five tight, well separated clusters listed out of order. The quintile seeds
+        # come out sorted, so this can't tell ranking from cluster order; the next test can.
         scores = np.array([50.0] * 5 + [10.0] * 5 + [40.0] * 5 + [20.0] * 5 + [30.0] * 5)
         np.testing.assert_array_equal(program2.kmeans(scores),
                                       [5] * 5 + [1] * 5 + [4] * 5 + [2] * 5 + [3] * 5)
+
+    def test_stars_follow_the_means_not_the_cluster_numbers(self):
+        # Means out of order, so star = cluster number + 1 would fail (#60).
+        np.testing.assert_array_equal(program2.stars_by_cluster(np.array([30.0, 10.0, 50.0, 20.0, 40.0])),
+                                      [3, 1, 5, 2, 4])
 
 
 class GroupOutputNameTests(unittest.TestCase):

@@ -7,6 +7,7 @@ This asks Gemini for the Program 1 code and saves it. It does not run the code.
 import argparse
 from pathlib import Path
 from typing import List
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,7 @@ from src.orchestrate import (
 )
 from src.validate import compare_detailed
 from src.pipeline_retry import retry_call
+from src.translation_history import CandidateHistory, HistoryStorageError, error_details
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -159,6 +161,7 @@ def generate_program1_code(
     *,
     max_attempts=3,
     retry_delay_seconds=2.0,
+    history_store=None,
 ):
     """Generate and save code without executing it."""
     plan = build_program1_plan(manifest_path, config_path)
@@ -171,6 +174,11 @@ def generate_program1_code(
         )
 
     code_dir.mkdir(parents=True, exist_ok=True)
+    metadata = {"manifest_path": str(manifest_path), "config_path": str(config_path)}
+    model = getattr(translator, "model_name", None)
+    if isinstance(model, str):
+        metadata["model_name"] = model
+    history = CandidateHistory(code_dir, history_store, metadata=metadata, new=True)
     generated_files = {}
 
     for step in plan:
@@ -185,17 +193,48 @@ def generate_program1_code(
         else:
             raise ValueError(f"Unsupported step kind: {step['kind']}")
 
+        requests = 0
+
+        def request_code():
+            nonlocal requests
+            requests += 1
+            try:
+                return operation()
+            except Exception as error:
+                try:
+                    history.record({
+                        "type": "request_error", "step_id": step["id"],
+                        "request_number": requests, "error": error_details(error),
+                    })
+                except Exception as storage_error:
+                    # A backend timeout must not trigger another Gemini request.
+                    raise HistoryStorageError(str(storage_error)) from storage_error
+                raise
+
         code, _attempts = retry_call(
-            operation,
+            request_code,
             max_attempts=max_attempts,
             delay_seconds=retry_delay_seconds,
         )
 
+        candidate_id = None
+        if isinstance(code, str):
+            candidate_id = history.candidate(step, code, origin="generated")
         if not isinstance(code, str) or not code.strip():
+            history.record({
+                "type": "generation_error", "step_id": step["id"],
+                "candidate_id": candidate_id,
+                "error": {"type": "ValueError", "message": "Empty or non-string Python code."},
+            })
             raise ValueError(f"Step {step['id']} returned empty Python code.")
 
         path = code_dir / f"{step['id']}.py"
-        path.write_text(code, encoding="utf-8")
+        try:
+            path.write_bytes(code.encode("utf-8"))
+        except Exception as error:
+            history.record({"type": "artifact_error", "candidate_id": candidate_id,
+                            "step_id": step["id"], "error": error_details(error)})
+            raise
         generated_files[step["id"]] = path
 
     return generated_files
@@ -209,8 +248,12 @@ def run_reviewed_program1(
     config_path=DEFAULT_GROUP_CONFIG,
     sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
     on_error="raise",
+    *,
+    history_store=None,
 ):
     """Execute previously reviewed code through the existing Orchestrator."""
+    if on_error not in ("raise", "report"):
+        raise ValueError("on_error must be raise or report.")
     code_dir = Path(code_dir)
     output_dir = Path(output_dir)
     sas_output_dir = Path(sas_output_dir)
@@ -229,18 +272,61 @@ def run_reviewed_program1(
     input_df = pd.read_csv(input_csv, dtype={"PROVIDER_ID": "string"})
     input_df["PROVIDER_ID"] = input_df["PROVIDER_ID"].str.zfill(6)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Clear earlier group outputs so a failed run cannot reuse them.
+    history = CandidateHistory(code_dir, history_store, metadata={
+        "manifest_path": str(manifest_path), "config_path": str(config_path),
+    })
+    execution_id = uuid4().hex
+    code_snapshot = {}
+    candidates = {}
     for step in plan:
-        if step["kind"] == "group":
-            table = step["group_config"]["output_table"]
-            (output_dir / f"{table}.csv").unlink(missing_ok=True)
+        if step["action"] == "translate":
+            code = (code_dir / f"{step['id']}.py").read_bytes().decode("utf-8")
+            code_snapshot[step["id"]] = code
+            candidates[step["id"]] = history.candidate(
+                step, code, origin="reviewed_file", reuse=True,
+            )
+    history.record({
+        "type": "execution_started", "execution_id": execution_id,
+        "review_status": "caller_supplied_reviewed_code", "candidates": candidates,
+        "execution_plan": plan,
+        "metadata": {"input_csv": str(input_csv), "sas_output_dir": str(sas_output_dir),
+                     "manifest_path": str(manifest_path), "config_path": str(config_path)},
+    })
+
+    setup_operation = "create_output_directory"
+    setup_path = output_dir
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clear earlier group outputs so a failed run cannot reuse them.
+        setup_operation = "remove_stale_output"
+        for step in plan:
+            if step["kind"] == "group":
+                table = step["group_config"]["output_table"]
+                setup_path = output_dir / f"{table}.csv"
+                setup_path.unlink(missing_ok=True)
+    except Exception as error:
+        history.record({
+            "type": "execution_error", "execution_id": execution_id,
+            "stage": "setup", "operation": setup_operation,
+            "path": str(setup_path), "error": error_details(error),
+        })
+        raise
 
     def translate_step(step):
-        return (code_dir / f"{step['id']}.py").read_text(
-            encoding="utf-8"
-        )
+        return code_snapshot[step["id"]]
+
+    def record_step(result):
+        if result["id"] in candidates:
+            history.record({
+                "type": "outcome", "candidate_id": candidates[result["id"]],
+                "execution_id": execution_id,
+                "validation_status": (
+                    "not_applicable" if result["kind"] == "macro" else
+                    "completed" if "validation" in result else "not_completed"
+                ),
+                "result": result,
+            })
 
     def execute_step(step, generated_code, dependency_outputs):
         scope = {"pd": pd, "np": np, "List": List}
@@ -290,6 +376,8 @@ def run_reviewed_program1(
         config_path=config_path,
         sas_output_dir=sas_output_dir,
         on_error=on_error,
+        on_step_result=record_step,
+        execution_plan=plan,
     )
 
 

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from src import translator
+from src.translation_history import LocalJSONHistoryStore
 
 
 class TranslatorGuardTests(unittest.TestCase):
@@ -85,6 +86,8 @@ class TranslatorGuardTests(unittest.TestCase):
                 )
 
             def translate_group_step(self, step, measures):
+                if isinstance(group_code[step["id"]], Exception):
+                    raise group_code[step["id"]]
                 return group_code[step["id"]]
 
         with (
@@ -100,6 +103,39 @@ class TranslatorGuardTests(unittest.TestCase):
             ),
         ):
             return translator.run_translator()
+
+    def history(self):
+        code_dir = self.data_dir.parent / "code"
+        pointer = json.loads((code_dir / "translation_history.json").read_text())
+        return LocalJSONHistoryStore(code_dir / ".translation_history").read_run(pointer["run_id"])
+
+    def test_legacy_history_records_code_without_claiming_validation_or_review(self):
+        self.run_fake({"om": "out_df = input_df.copy()"})
+        records = self.history()
+        candidates = [r for r in records if r["type"] == "candidate"]
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(candidates[-1]["code"], "out_df = input_df.copy()")
+        outcomes = [r for r in records if r["type"] == "outcome"]
+        self.assertEqual(len(outcomes), 2)
+        self.assertTrue(all(r["validation_status"] == "not_run" for r in outcomes))
+        starts = [r for r in records if r["type"] == "execution_started"]
+        self.assertTrue(all(r["review_status"] == "not_recorded" for r in starts))
+
+    def test_legacy_request_error_is_separate_from_candidates(self):
+        with self.assertRaisesRegex(TimeoutError, "offline"):
+            self.run_fake({"om": TimeoutError("offline")})
+        records = self.history()
+        self.assertEqual(len([r for r in records if r["type"] == "candidate"]), 1)
+        self.assertEqual(records[-1]["type"], "request_error")
+        self.assertNotIn("candidate_id", records[-1])
+
+    def test_legacy_execution_error_preserves_failed_candidate(self):
+        with self.assertRaisesRegex(RuntimeError, "intentional"):
+            self.run_fake({"om": "raise RuntimeError('intentional')"})
+        records = self.history()
+        self.assertEqual(records[-1]["type"], "outcome")
+        self.assertEqual(records[-1]["error"]["type"], "RuntimeError")
+        self.assertEqual(records[-1]["validation_status"], "not_run")
 
     def test_previous_group_variables_do_not_leak(self):
         """Safety must not be able to use Mortality's helper variables."""
