@@ -819,5 +819,67 @@ class ValidatorTests(unittest.TestCase):
         self.assertTrue(result)
 
 
+class MissingValueMismatchTests(unittest.TestCase):
+    """A mismatch where only one side is missing is counted separately (#38)."""
+
+    def test_numeric_missing_on_each_side_is_counted(self):
+        sas = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102", "103", "104"],
+            "SCORE": [1.0, None, 3.0, 4.0],
+        })
+        # 101: Python missing. 102: SAS missing. 103: wrong value. 104: matches.
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102", "103", "104"],
+            "SCORE": [None, 2.0, 9.0, 4.0],
+        })
+
+        mismatch = compare_detailed(py, sas, key="PROVIDER_ID")["mismatches"]["SCORE"]
+
+        self.assertEqual(mismatch["count"], 3)
+        self.assertEqual(mismatch["python_missing"], 1)
+        self.assertEqual(mismatch["sas_missing"], 1)
+
+    def test_both_missing_is_not_a_mismatch(self):
+        sas = pd.DataFrame({"PROVIDER_ID": ["101", "102"], "SCORE": [None, 1.0]})
+        py = pd.DataFrame({"PROVIDER_ID": ["101", "102"], "SCORE": [None, 2.0]})
+
+        mismatch = compare_detailed(py, sas, key="PROVIDER_ID")["mismatches"]["SCORE"]
+
+        self.assertEqual(mismatch["count"], 1)
+        self.assertEqual(mismatch["python_missing"], 0)
+        self.assertEqual(mismatch["sas_missing"], 0)
+
+    def test_blank_text_counts_as_missing(self):
+        sas = pd.DataFrame({"PROVIDER_ID": ["101", "102"], "PEER": ["A", "  "]})
+        py = pd.DataFrame({"PROVIDER_ID": ["101", "102"], "PEER": ["", "B"]})
+
+        mismatch = compare_detailed(py, sas, key="PROVIDER_ID")["mismatches"]["PEER"]
+
+        self.assertEqual(mismatch["count"], 2)
+        self.assertEqual(mismatch["python_missing"], 1)
+        self.assertEqual(mismatch["sas_missing"], 1)
+
+    def test_printed_report_shows_missing_counts(self):
+        sas = pd.DataFrame({"PROVIDER_ID": ["101", "102"], "SCORE": [1.0, 2.0]})
+        py = pd.DataFrame({"PROVIDER_ID": ["101", "102"], "SCORE": [None, 2.0]})
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            compare(py, sas, key="PROVIDER_ID")
+
+        self.assertIn("SCORE: 1 mismatches (1 missing in Python, 0 missing in SAS)",
+                      output.getvalue())
+
+    def test_feedback_is_valid_json(self):
+        sas = pd.DataFrame({"PROVIDER_ID": ["101"], "SCORE": [1.0]})
+        py = pd.DataFrame({"PROVIDER_ID": ["101"], "SCORE": [None]})
+
+        mismatch = compare_detailed(py, sas, key="PROVIDER_ID")["mismatches"]["SCORE"]
+
+        # These go to Gemini in repair feedback, so they must be plain ints.
+        json.dumps({k: mismatch[k] for k in ("count", "python_missing", "sas_missing")})
+        self.assertIs(type(mismatch["python_missing"]), int)
+
+
 if __name__ == "__main__":
     unittest.main()
