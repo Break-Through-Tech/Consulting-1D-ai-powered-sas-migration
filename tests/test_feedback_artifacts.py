@@ -24,6 +24,7 @@ class FeedbackArtifactTests(unittest.TestCase):
                 "output/program1_feedback/attempt_1/code/grp_score_macro.py",
                 "output/program1_feedback/attempt_2/data/OUTCOME_SAFETY.csv",
                 "output/program1_feedback/custom_run/report.json",
+                "output/validation_report/validation_report.json",
             ]
             legitimate = [
                 "src/program1_integration.py",

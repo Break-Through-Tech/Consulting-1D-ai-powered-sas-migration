@@ -16,4 +16,6 @@ translation_history.json
 
 # Generated code, data, and reports from Program 1 feedback-loop runs.
 /output/program1_feedback/
+# Reports written by python -m src.validation_report.
+/output/validation_report/
 .venv/

@@ -20,19 +20,29 @@ SAS_OUTPUT_CSV_DIR = PROJECT_DIR / "SAS Output CSV"
 
 INPUT_DATASET = "alldata_2025jul"
 
-# Datasets written to the R. library by programs 0-2, in pipeline order.
-OUTPUT_DATASETS = [
-    "less100_measure",
-    "measure_average_stddev_2025jul",
-    "std_data_2025jul_analysis",
-    "outcome_mortality",
-    "outcome_safety",
-    "outcome_readmission",
-    "ptexp",
-    "process",
-    "star_2025jul",
-    "national_average_2025jul",
-]
+# The 10 datasets that programs 0-2 write to the R. library, in pipeline order, and how
+# the rows of each one are matched with SAS. src/validation_report.py looks it up here.
+# (run_program1 in src/orchestrate.py still passes PROVIDER_ID for its five tables itself.)
+#   program: the SAS program that writes the dataset.
+#   key: the column that identifies a row. Rows are matched on it, so row order is not
+#        compared. None means the table has no such column (the national averages are
+#        a single row), so rows are compared by position.
+# Everything else is the same for all 10: the report compares each one with its
+# .sas7bdat file at the default tolerance.
+OUTPUTS = {
+    "less100_measure": {"program": 0, "key": "measure_name"},
+    "measure_average_stddev_2025jul": {"program": 0, "key": "_STAT_"},
+    "std_data_2025jul_analysis": {"program": 0, "key": "PROVIDER_ID"},
+    "outcome_mortality": {"program": 1, "key": "PROVIDER_ID"},
+    "outcome_safety": {"program": 1, "key": "PROVIDER_ID"},
+    "outcome_readmission": {"program": 1, "key": "PROVIDER_ID"},
+    "ptexp": {"program": 1, "key": "PROVIDER_ID"},
+    "process": {"program": 1, "key": "PROVIDER_ID"},
+    "star_2025jul": {"program": 2, "key": "PROVIDER_ID"},
+    "national_average_2025jul": {"program": 2, "key": None},
+}
+
+OUTPUT_DATASETS = list(OUTPUTS)
 
 SAS_PROGRAMS = [
     "Star_Macros.sas",
