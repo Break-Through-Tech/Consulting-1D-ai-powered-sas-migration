@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.validate import compare, compare_detailed
+from src.validate import compare, compare_detailed, read_keyed_csv
 
 
 class ValidatorTests(unittest.TestCase):
@@ -879,6 +879,19 @@ class MissingValueMismatchTests(unittest.TestCase):
         # These go to Gemini in repair feedback, so they must be plain ints.
         json.dumps({k: mismatch[k] for k in ("count", "python_missing", "sas_missing")})
         self.assertIs(type(mismatch["python_missing"]), int)
+
+
+class ReadKeyedCsvTests(unittest.TestCase):
+    def test_options_are_used_to_find_the_key_as_well(self):
+        # Without the separator the header is one column, the key is not found, and
+        # 010001 is read as the number 10001.
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "table.csv"
+            path.write_text("provider_id;x\n010001;1\n", encoding="utf-8")
+
+            table = read_keyed_csv(path, "PROVIDER_ID", sep=";")
+
+            self.assertEqual(table["provider_id"].tolist(), ["010001"])
 
 
 if __name__ == "__main__":

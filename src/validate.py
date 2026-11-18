@@ -43,19 +43,23 @@ def clean(df):
 ROW_POSITION_KEY = "_ROW_POSITION_"
 
 
-def _read_sas_csv(sas_csv, key):
+def read_keyed_csv(path, key, **read_csv_options):
     """
-    Read a SAS reference CSV while preserving the key column as text.
+    Read a CSV of SAS or Python output while preserving the key column as text.
 
     This prevents identifiers such as 001234 from being converted to
-    integers and losing their leading zeros.
+    integers and losing their leading zeros. The key is found in the
+    header without regard to upper or lower case. Any other keyword
+    arguments are passed on to pandas.read_csv. With a key, do not pass
+    dtype or nrows: this function sets them itself, so pandas raises
+    TypeError.
     """
     if key is None:
-        return pd.read_csv(sas_csv)
+        return pd.read_csv(path, **read_csv_options)
 
     key_upper = key.strip().upper()
 
-    header = pd.read_csv(sas_csv, nrows=0)
+    header = pd.read_csv(path, nrows=0, **read_csv_options)
 
     key_column = next(
         (
@@ -72,7 +76,7 @@ def _read_sas_csv(sas_csv, key):
         else None
     )
 
-    return pd.read_csv(sas_csv, dtype=dtype)
+    return pd.read_csv(path, dtype=dtype, **read_csv_options)
 
 
 def _column_stats(py_numbers, sas_numbers):
@@ -124,7 +128,7 @@ def compare_detailed(
     if isinstance(sas_csv, pd.DataFrame):
         sas = clean(sas_csv)
     else:
-        sas = clean(_read_sas_csv(sas_csv, key))
+        sas = clean(read_keyed_csv(sas_csv, key))
 
     if rtol is None:
         rtol = DEFAULT_RTOL

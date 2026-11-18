@@ -35,6 +35,11 @@ Run these from the main project folder.
   ```
   python -m unittest discover tests
   ```
+- **Check all 10 outputs against SAS** (no key needed):
+  ```
+  python -m src.validation_report --baseline
+  ```
+  This checks the hand-written Python. To check a pipeline run, give it the folder of CSVs instead, for example `python -m src.validation_report output/data`. The pipeline makes only Program 1's five tables today, so the best result for that folder is `INCOMPLETE` (5 of 10 not checked). More details: `docs/validation_report.md`
 - **Get code from Gemini** (uses your key):
   ```
   python -m src.program1_integration
