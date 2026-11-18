@@ -273,6 +273,11 @@ def compare_detailed(
         mismatch_count = int((~same).sum())
 
         if mismatch_count:
+            # A value missing on only one side usually means a SAS missing-value
+            # rule was not followed, not a wrong number, so count it separately.
+            py_missing = py_values.isna().to_numpy(dtype=bool)
+            sas_missing = sas_values.isna().to_numpy(dtype=bool)
+
             examples = merged.loc[
                 ~same,
                 [
@@ -284,6 +289,8 @@ def compare_detailed(
 
             result["mismatches"][column] = {
                 "count": mismatch_count,
+                "python_missing": int((py_missing & ~sas_missing).sum()),
+                "sas_missing": int((sas_missing & ~py_missing).sum()),
                 "examples": examples.to_dict("records"),
             }
 
@@ -387,7 +394,9 @@ def compare(
     for column, mismatch in result["mismatches"].items():
         print(
             f"\n{column}: "
-            f"{mismatch['count']} mismatches"
+            f"{mismatch['count']} mismatches "
+            f"({mismatch['python_missing']} missing in Python, "
+            f"{mismatch['sas_missing']} missing in SAS)"
         )
 
         if mismatch["examples"]:
