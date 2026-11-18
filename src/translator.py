@@ -80,6 +80,8 @@ Your code must:
   (CALL SYMPUT, PROC SQL INTO, %LET); give each listed variable a value;
 - call an already defined macro function when the SAS code calls that macro, and not
   re-implement it.
+- treat macro variable values that start with 'runtime (' as placeholders: the real value
+  is in `macro_vars` when the code runs, so read it there and never copy the placeholder.
 """ + SAS_BEHAVIOUR_PROMPT + SAS_PROCS_PROMPT
 
 
