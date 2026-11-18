@@ -28,6 +28,68 @@ DEFAULT_SAS_OUTPUT_DIR = ROOT / "data" / "Project_1" / "SAS Output CSV"
 OUTPUT_CODE_DIR = ROOT / "output" / "generated_code"
 OUTPUT_DATA_DIR = ROOT / "output" / "data"
 
+
+# ---------------------------------------------------------------------------
+# Prompts for Programs 0 and 2 (issue #61)
+# ---------------------------------------------------------------------------
+SAS_PROCS_PROMPT = (
+    "Use `sas_procs.fastclus` for PROC FASTCLUS and "
+    "`sas_procs.univariate_percentiles` for PROC UNIVARIATE, not other libraries. "
+    "They are already in scope: "
+    "fastclus(data, var, seed, *, maxc, maxiter=1, converge=0.02, strict=None) "
+    "returns an object with .cluster_centers, .out and .converged; "
+    "univariate_percentiles(data, var, pctlpts, pctlpre='P') returns a one-row DataFrame."
+)
+
+SAS_BEHAVIOUR_PROMPT = """
+SAS BEHAVIOURS TO PRESERVE:
+- Missing values: sum(of ...) and mean(of ...) skip missing values; comparisons with
+  a missing number are not true; blank text counts as missing.
+- Standard deviations are sample standard deviations (ddof=1).
+- Keep PROVIDER_ID as a zero-padded string and keep SAS's column order and names.
+- Do not hardcode values from the SAS output or read files from disk.
+"""
+
+MACRO_DEFINITION_PROMPT = """
+You are an expert SAS-to-Python translator. Translate the SAS macro into ONE Python
+function using pandas and numpy.
+
+- The function name is given in the request.
+- Dataset parameters (names of SAS datasets) become pandas DataFrame parameters, and
+  the macro's output datasets are returned as DataFrames (a single DataFrame, or a
+  dict mapping output parameter name to DataFrame when there are several).
+- Other macro parameters keep their names; macro variables used inside the macro
+  (&name) are plain Python values.
+- Return only code that defines the function. pd, np, List and sas_procs are already
+  imported. Do not run the function.
+""" + SAS_BEHAVIOUR_PROMPT + SAS_PROCS_PROMPT
+
+STEP_PROMPT = """
+You are an expert SAS-to-Python translator. Translate one SAS step into Python code
+that runs in a prepared scope. Return only code, with no markdown.
+
+The scope provides:
+- `datasets`: dict mapping each input dataset name, exactly as listed, to a DataFrame.
+- `macro_vars`: dict of SAS macro variable values (&name) as Python values.
+- pd, np, List and sas_procs, plus every macro function listed as already defined.
+
+Your code must:
+- assign `outputs`, a dict with EVERY listed output dataset name as a key and a
+  DataFrame as the value;
+- assign `new_macro_vars`, a dict, only when the step sets macro variables
+  (CALL SYMPUT, PROC SQL INTO, %LET); give each listed variable a value;
+- call an already defined macro function when the SAS code calls that macro, and not
+  re-implement it.
+""" + SAS_BEHAVIOUR_PROMPT + SAS_PROCS_PROMPT
+
+
+def _runtime_macro_vars(step_info: Dict[str, Any]) -> List[str]:
+    """Names of macro variables the manifest says this step sets at run time."""
+    return [
+        name for name, value in (step_info.get("macro_vars") or {}).items()
+        if isinstance(value, str) and "set in this step" in value.lower()
+    ]
+
 # ---------------------------------------------------------------------------
 # 1. Pydantic Output Schema for Gemini Structured Generation
 # ---------------------------------------------------------------------------
@@ -155,6 +217,71 @@ class GeminiSASTranslator:
 
         res: TranslationOutput = TranslationOutput.model_validate_json(response.text)
         return res.python_code
+
+    # -- Programs 0 and 2: general SAS steps and macros (issue #61) -----------
+
+    def _generate_code(self, system_prompt: str, user_prompt: str) -> str:
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.0,
+                response_mime_type="application/json",
+                response_schema=TranslationOutput,
+            ),
+        )
+        return TranslationOutput.model_validate_json(response.text).python_code
+
+    def translate_macro_definition(self, step_info: Dict[str, Any], macro_name: str) -> str:
+        """Translate a SAS macro definition into one Python function.
+
+        Used for Program 0 and 2 macros (%keep_hos, %report, %kmeans, ...).
+        Program 1's grp_score macro keeps its own prompt in translate_macro().
+        """
+        fence = "`" * 3
+        user_prompt = "\n".join([
+            f"Translate this SAS macro into a Python function named {macro_name}.",
+            f"Step ID: {step_info.get('id')}",
+            "SAS Code:",
+            f"{fence}sas",
+            str(step_info.get("sas_code")),
+            fence,
+            "Implementation notes from the manifest:",
+            str(step_info.get("notes") or "None"),
+        ])
+        return self._generate_code(MACRO_DEFINITION_PROMPT, user_prompt)
+
+    def translate_step(
+        self,
+        step_info: Dict[str, Any],
+        macro_vars: Dict[str, Any],
+        macros: Dict[str, str],
+    ) -> str:
+        """Translate one DATA step, PROC step or macro call into Python.
+
+        macros maps the names of macro functions that are already defined to
+        their signatures, so the generated code can call them.
+        """
+        fence = "`" * 3
+        user_prompt = "\n".join([
+            f"Step ID: {step_info.get('id')}",
+            f"Title: {step_info.get('title')}",
+            f"Input datasets (keys of `datasets`): {step_info.get('inputs', [])}",
+            f"Output datasets (keys `outputs` must contain): {step_info.get('outputs', [])}",
+            "Macro variables available in `macro_vars`: "
+            + json.dumps(macro_vars, default=str),
+            "Macro variables this step must set in `new_macro_vars`: "
+            + str(_runtime_macro_vars(step_info)),
+            f"Macro functions already defined: {json.dumps(macros)}",
+            "SAS Code:",
+            f"{fence}sas",
+            str(step_info.get("sas_code")),
+            fence,
+            "Implementation notes from the manifest:",
+            str(step_info.get("notes") or "None"),
+        ])
+        return self._generate_code(STEP_PROMPT, user_prompt)
 
 # ---------------------------------------------------------------------------
 # 2. Gemini Translation Client
