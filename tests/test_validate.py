@@ -881,5 +881,36 @@ class MissingValueMismatchTests(unittest.TestCase):
         self.assertIs(type(mismatch["python_missing"]), int)
 
 
+class NullableNumberTests(unittest.TestCase):
+    """pandas nullable number columns (Int64, Float64) with a missing value.
+
+    Before pandas 2.2, converting such a column with to_numpy(dtype=float)
+    raised instead of giving NaN, so the validator crashed.
+    """
+
+    def test_nullable_int_with_missing_value_is_compared(self):
+        sas = pd.DataFrame({"PROVIDER_ID": ["101", "102", "103"], "STAR": [5.0, None, 3.0]})
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102", "103"],
+            "STAR": pd.array([5, None, 4], dtype="Int64"),
+        })
+
+        result = compare_detailed(py, sas, key="PROVIDER_ID")
+
+        self.assertFalse(result["passed"])
+        mismatch = result["mismatches"]["STAR"]
+        self.assertEqual(mismatch["count"], 1)
+        self.assertEqual(mismatch["python_missing"], 0)
+
+    def test_nullable_float_with_missing_value_matches(self):
+        sas = pd.DataFrame({"PROVIDER_ID": ["101", "102"], "SCORE": [1.5, None]})
+        py = pd.DataFrame({
+            "PROVIDER_ID": ["101", "102"],
+            "SCORE": pd.array([1.5, None], dtype="Float64"),
+        })
+
+        self.assertTrue(compare_detailed(py, sas, key="PROVIDER_ID")["passed"])
+
+
 if __name__ == "__main__":
     unittest.main()
