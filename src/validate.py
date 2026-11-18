@@ -255,8 +255,8 @@ def compare_detailed(
             pd.api.types.is_numeric_dtype(py_values)
             and pd.api.types.is_numeric_dtype(sas_values)
         ):
-            py_numbers = py_values.to_numpy(dtype=float)
-            sas_numbers = sas_values.to_numpy(dtype=float)
+            py_numbers = py_values.to_numpy(dtype=float, na_value=np.nan)
+            sas_numbers = sas_values.to_numpy(dtype=float, na_value=np.nan)
             result["column_stats"][column] = _column_stats(py_numbers, sas_numbers)
             same = np.isclose(
                 py_numbers,
