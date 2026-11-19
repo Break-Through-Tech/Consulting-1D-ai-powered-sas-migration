@@ -231,5 +231,5 @@ support resumption.
 
 History supports evaluation (#43) and stores the validation details returned by
 `src/validate.py` (#39). Main's exact-reference/tolerance updates (#40) and
-Programs 0/2 orchestration (#49) are included, but persistent history still covers
+Programs 0/2 orchestration (#49, closed) are included, but persistent history still covers
 Program 1 only. Token/cost tracking remains outside this feature.
