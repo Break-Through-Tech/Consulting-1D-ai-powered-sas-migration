@@ -216,6 +216,25 @@ class ExpandNameListTests(unittest.TestCase):
         self.assertEqual(["H_1", "H_2", "H_3"], expand_name_list("H_1-3"))
         self.assertEqual(["A5"], expand_name_list("A5-A5"))
 
+    def test_with_columns_names_take_the_spelling_of_the_columns(self):
+        columns = ["PROVIDER_ID", "OP_18B", "HAI_1", "hai_2"]
+
+        self.assertEqual(["OP_18B", "HAI_1", "hai_2"], expand_name_list("OP_18b HAI_1-HAI_2", columns))
+
+    def test_a_name_with_no_column_is_returned_as_written(self):
+        self.assertEqual(["X_1", "Y"], expand_name_list("X_1 Y", ["PROVIDER_ID"]))
+
+    def test_columns_can_be_a_pandas_index(self):
+        frame = pd.DataFrame({"OP_18B": [1]})
+
+        self.assertEqual(["OP_18B"], expand_name_list("OP_18b", frame.columns))
+
+    def test_the_membership_check_models_make_now_finds_the_column(self):
+        frame = pd.DataFrame({"OP_18B": [1, None], "MORT": [1, 2]})
+        counted = {n: int(frame[n].notna().sum()) for n in expand_name_list("OP_18b MORT", frame.columns) if n in frame.columns}
+
+        self.assertEqual({"OP_18B": 1, "MORT": 2}, counted)
+
     def test_runs_of_whitespace_are_ignored(self):
         self.assertEqual(["A", "B"], expand_name_list("  A \n B  "))
 

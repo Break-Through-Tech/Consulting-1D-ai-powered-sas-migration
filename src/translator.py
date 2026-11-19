@@ -47,11 +47,21 @@ SAS_BEHAVIOUR_PROMPT = """
 CODE FORMAT: python_code must be ordinary multi-line Python with real line breaks and
 indentation. Never put several statements, loops or ifs on one line.
 
+DATA STEP OPTIONS: apply every option in parentheses after a data set name. DROP=(a b) or
+DROP=c1-cn removes those variables from the output data set, KEEP= keeps only those, WHERE=
+filters rows, RENAME=(old=new) renames. Do not leave a dropped variable in the output.
+Example: DATA &indsn(where=(Total_m_cnt>=1) drop=c1-c&nmeasure); SET &indsn; keeps the rows
+with Total_m_cnt>=1 and removes the variables c1 to cn (n is nmeasure) from the result, so
+the helper columns you created for c1..cn must not be in the DataFrame you return. Only the
+listed variables are dropped: Total_m_cnt is not in DROP=, so it stays in the result, with
+the spelling the SAS code gives it.
+
 SAS BEHAVIOURS TO PRESERVE:
 - Missing values: sum(of ...) and mean(of ...) skip missing values; comparisons with
   a missing number are not true; blank text counts as missing.
 - Standard deviations are sample standard deviations (ddof=1).
-- Keep PROVIDER_ID as a zero-padded string and keep SAS's column order and names.
+- Keep PROVIDER_ID exactly as it is in the input: text, never padded, trimmed or converted.
+  Keep SAS's column order and names.
 - Do not hardcode values from the SAS output or read files from disk.
 """
 
@@ -67,11 +77,17 @@ NAMES AND TYPES (SAS ignores case, pandas does not, so be exact):
 - Macro variable values are strings. A list of names is one string: split it on whitespace.
   Convert counts with int(). A SAS range such as HAI_1-HAI_6 in a name list means the six
   names HAI_1 HAI_2 ... HAI_6. Do not expand it yourself: call the ready-made
-  expand_name_list(text), which returns the list of names with every range expanded.
+  expand_name_list(text, df.columns) (a plain name in scope, not part of sas_procs), which
+  returns the list of names with every range
+  expanded, each spelled as the column of df is spelled. Always pass the columns of the
+  dataset the names belong to: a SAS list may say OP_18b where the column is OP_18B, and
+  SAS treats them as the same variable. Then use the returned names to read the columns.
 - Name every column you create in lower case, as the SAS code writes it (measure_in_name,
   measure_in_std, measure_name), and use the same spelling in every step.
 - PROC SQL ... INTO :var SEPARATED BY '' NOTRIM joins character values that SAS pads to the
-  column width, so the padding separates the names. In Python join the names with one space.
+  column width, so the padding separates the names. In Python always write ' '.join(names)
+  with one space. Never write ''.join(names): the names would run into one long word and
+  expand_name_list could not split them again.
 - A macro function receives what the SAS macro call passes: dataset parameters as DataFrames,
   name lists as whitespace-separated strings, counts as int. Call it with datasets taken
   from `datasets` and values taken from `macro_vars`; never pass a dataset name.
@@ -88,7 +104,7 @@ SAS OUTPUT SHAPES:
   columns _NAME_, _LABEL_ and COL1, because later steps drop _NAME_ and _LABEL_.
 - PROC MEANS DATA=d; VAR a b; OUTPUT OUT=o; (no statistic keywords) writes 5 rows in this
   order: _STAT_ = N (count of non-missing), MIN, MAX, MEAN, STD (sample, ddof=1). Columns are
-  _TYPE_ (0), _FREQ_ (number of rows in d, the same in all 5 rows), _STAT_, then one column per
+  _TYPE_ (the NUMBER 0, not text: unlike PROC TABULATE's text _TYPE_), _FREQ_ (number of rows in d, the same in all 5 rows), _STAT_, then one column per
   VAR variable holding that statistic. Use the variable names as they are, with no suffix.
 """
 
