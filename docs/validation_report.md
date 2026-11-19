@@ -203,6 +203,25 @@ all(entry["status"] == "PASS" for entry in report["outputs"].values() if entry["
 
 `problem_lines(report["outputs"][NAME])` returns the plain sentences for one output, the same ones the text report prints.
 
+## When a failure triggers a retry
+
+This is the error threshold from #39 and #38. The tolerance is fixed, so there is no "small enough" difference: any `FAIL` is a real difference and is worth a repair. What decides a retry is whether a repair can fix it.
+
+The Program 1 feedback loop (`run_program1_with_feedback` in `src/program1_integration.py`) already follows this rule:
+
+| Result of an attempt | What happens |
+|---|---|
+| Every output passes | Stop: `PASS`. |
+| An output fails | Retry: ask Gemini to repair the steps that wrote it (and every macro step), and send the `validation` of each failed output as feedback. |
+| An output fails and its SAS table has repeated or blank keys (`duplicate_sas_ids`, `blank_sas_keys`) | Do not retry for it, whatever else differs. The problem is in the SAS reference, so new code cannot fix it. It is listed in `non_repairable_outputs`. If no other output failed, stop. |
+| A step crashes or is blocked (`ERROR`, `BLOCKED`) | Stop. Runtime errors are not repaired. |
+| The code is not approved in review | Stop: `REVIEW_REQUIRED`. |
+| The attempt limit is reached | Stop with the last result. `max_attempts` is 3 by default and counts the first translation. |
+
+This is not the same as the retries for temporary Gemini errors (`retry_call` in `src/pipeline_retry.py`), which repeat one request after a network or rate-limit error and never look at the results.
+
+The loop for Programs 0 and 2 (#66) should use the same rule, so that all three programs retry for the same reasons.
+
 ## Limits
 
 - **The report checks tables, not how they were made.** It cannot tell a new CSV from one left by an older run. For a folder, `source` shows when the oldest and newest files were saved.
