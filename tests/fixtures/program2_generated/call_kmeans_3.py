@@ -1,0 +1,1 @@
+outputs = {'WORK.CNT_S3': kmeans(datasets['WORK.CNT_S30'], 'WORK.CNT_S3', 'cnt_grp')}

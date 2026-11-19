@@ -1,0 +1,1 @@
+outputs = {'WORK.PROCESS_AVG': nation_avg(datasets['PROCESS'], 'process_avg', 'Prc_of_Care_Grp_Score_Nat')}
