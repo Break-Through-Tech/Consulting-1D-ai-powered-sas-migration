@@ -84,6 +84,6 @@ Ten generate, read, run passes on `gemini-3.5-flash-lite`:
 
 ## Not done yet
 
-- **Program 2** on generated code (#33). `run_program` refuses it until Program 1's results and macro variables are handed over (#72).
+- **Program 2** on generated code (#33). `run_program 2` already starts it from the SAS outputs of Programs 0 and 1 and the measure lists and counts in `config/measure_groups.json` (`program2_inputs`, #72).
 - **Repair and history for steps** (#66).
 - **Program 0, 1 and 2 chained on generated code** (#32).

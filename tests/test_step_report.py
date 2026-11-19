@@ -130,12 +130,12 @@ class RunProgramCommandTests(unittest.TestCase):
 
         self.assertEqual(2, caught.exception.code)
 
-    def test_program_2_says_it_is_not_ready(self):
-        with contextlib.redirect_stderr(io.StringIO()) as errors:
-            with self.assertRaises(SystemExit):
-                main(["2", "--code-dir", str(FIXTURE), "--reviewed"])
+    def test_program_2_with_another_programs_code_names_the_missing_steps(self):
+        # Program 2 runs since #72, but never on a folder that lacks its steps.
+        with self.assertRaises(FileNotFoundError) as caught:
+            main(["2", "--code-dir", str(FIXTURE), "--reviewed"])
 
-        self.assertIn("#72", errors.getvalue())
+        self.assertIn("call_report", str(caught.exception))
 
     def test_a_missing_code_folder_is_reported(self):
         with contextlib.redirect_stderr(io.StringIO()) as errors:

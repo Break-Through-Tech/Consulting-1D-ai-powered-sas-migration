@@ -1,4 +1,4 @@
-"""Run saved, reviewed Program 0 code and check it against SAS (#75).
+"""Run saved, reviewed Program 0 or 2 code and check it against SAS (#75, #72).
 
     python -m src.generate_steps 0 --min-interval 5     writes the code (needs a key)
     (read every file in the code folder: it runs with full access to this computer)
@@ -6,7 +6,7 @@
 
 Prints what happened to each step, then the validation report for the outputs of that
 program. Exit code 0 means every step ran and every output of the program matches SAS.
-Program 2 needs Program 1's results and macro variables first (#72).
+Program 2 starts from the SAS outputs of Programs 0 and 1 (see program2_inputs).
 """
 
 from __future__ import annotations
@@ -15,13 +15,37 @@ import argparse
 from pathlib import Path
 
 from src import data_io, validation_report
-from src.orchestrate import build_step_plan
+from src.orchestrate import DEFAULT_GROUP_CONFIG, build_step_plan, load_measure_groups
 from src.step_runner import run_steps_report
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAM_OUTPUTS = {
     0: ("LESS100_MEASURE", "MEASURE_AVERAGE_STDDEV_2025JUL", "STD_DATA_2025JUL_ANALYSIS"),
+    2: ("STAR_2025JUL", "NATIONAL_AVERAGE_2025JUL"),
 }
+
+
+def program2_inputs(config_path=DEFAULT_GROUP_CONFIG):
+    """The tables and macro variables Program 2 needs from Programs 0 and 1 (#72).
+
+    Returns (datasets, macro_vars) for run_steps_report's initial_datasets and
+    initial_macro_vars, so Program 2 is checked on its own:
+      datasets    STD_DATA_2025JUL_ANALYSIS (Program 0) and the five group tables
+                  (Program 1), as the SAS outputs. A SAS input always matches itself,
+                  so the report only checks Program 2's own outputs.
+      macro_vars  for each group in config/measure_groups.json, measure_<group> (its
+                  std_ measure names, separated by one space, as Program 0's PROC SQL
+                  INTO sets it) and measure_<group>_cnt (how many, as text, as
+                  Program 1's PROC SQL count sets it).
+    """
+    groups = load_measure_groups(config_path)
+    names = ["STD_DATA_2025JUL_ANALYSIS"] + [group["output_table"].upper() for group in groups.values()]
+    datasets = {name: data_io.load_sas_output(name.lower()) for name in names}
+    macro_vars = {}
+    for key, group in groups.items():
+        macro_vars[f"measure_{key}"] = " ".join(group["measures"])
+        macro_vars[f"measure_{key}_cnt"] = str(len(group["measures"]))
+    return datasets, macro_vars
 
 
 def main(argv=None):
@@ -34,8 +58,6 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    if args.program == "2":
-        parser.error("Program 2 needs the Program 1 outputs and macro variables first (#72)")
     program = int(args.program)
 
     code_dir = Path(args.code_dir) if args.code_dir else ROOT / "output" / f"program{program}_generated_code"
@@ -45,9 +67,13 @@ def main(argv=None):
         parser.error(f"code folder not found: {code_dir}")
 
     plan = build_step_plan(ROOT / "manifests" / f"program{program}.json")
+    if program == 0:
+        datasets, macro_vars = {"HC.ALLDATA_2025JUL": data_io.load_input()}, {}
+    else:
+        datasets, macro_vars = program2_inputs()
     result = run_steps_report(
         plan, code_dir, reviewed=True,
-        initial_datasets={"HC.ALLDATA_2025JUL": data_io.load_input()},
+        initial_datasets=datasets, initial_macro_vars=macro_vars,
     )
 
     print("STEPS")

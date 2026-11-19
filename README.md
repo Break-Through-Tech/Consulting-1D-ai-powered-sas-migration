@@ -9,7 +9,7 @@ Uses Gemini to turn SAS programs into Python, then checks that the Python gives 
 
 - **Program 1:** works. 5 real Gemini runs matched SAS on all 5 tables. The largest difference was `1.24e-14`.
 - **Program 0:** works on one real Gemini run. All 33 steps ran and all 3 outputs matched SAS (largest difference `1.57e-13`). Gemini's output changes between runs, so it is not stable yet. That run is saved as a test (`tests/fixtures/program0_generated/`). See `docs/step_runner.md`.
-- **Program 2:** the AI version can't run yet. It needs Program 1's results handed over (#72) and the translation (#33).
+- **Program 2:** `run_program 2` can run it, starting from the SAS outputs of Programs 0 and 1 (#72). The AI translation that passes is still to do (#33).
 
 ## Setup
 
