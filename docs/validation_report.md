@@ -222,19 +222,19 @@ This is not the same as the retries for temporary Gemini errors (`retry_call` in
 
 ### Programs 0 and 2 (step manifests)
 
-The loop for Programs 0 and 2 (#66) repairs run-time errors too, agreed in #88. Most failures there are a step whose code raises (`failed` in `run_steps_report`), and asking for that step again with its error as `feedback=` is what makes runs stable. This rule is agreed but not built yet.
+The loop for Programs 0 and 2 (#66) should repair run-time errors too. Hao and Miguel proposed this in #88 and #66; Shane (#66 owner) has not confirmed it yet. Most failures there are a step whose code raises (`failed` in `run_steps_report`), and asking for that step again with its error as `feedback=` is what makes runs stable. This rule is not built yet.
 
 | Result of an attempt | What happens |
 |---|---|
 | Every output of the program passes | Stop: `PASS`. |
 | A step is `failed` | Retry: ask again for that step, with its error as feedback. |
 | A step is `blocked` | Do not ask for it. It runs again once the step it waits on is fixed. |
-| An output fails | Retry, as in Program 1, with its `validation` as feedback. |
+| An output fails | Retry, as in Program 1, with its `validation` as feedback. Which steps to ask for again is not decided yet (#71). A first version asks only for the `failed` steps. |
 | An output fails and its SAS table has repeated or blank keys | Do not retry for it, as in Program 1. |
 | The code is not approved in review | Stop. |
 | The attempt limit is reached | Stop with the last result. Same limit as Program 1. |
 
-Some run-time errors come from the runner, not the generated code, and asking Gemini again does not fix them reliably. Fix those in `src/step_runner.py` instead. For example, a column lookup that ignores case works for `df['X']` but not yet for a list of columns (`df[['A', 'B']]`) or `sort_values(by=...)`.
+Some run-time errors come from the runner, not the generated code, and asking Gemini again does not fix them reliably. Fix those in `src/step_runner.py` instead. For example, a column lookup that ignores case works for `df['X']` but not yet for a list of columns (`df[['A', 'B']]`) or `sort_values(by=...)`. Miguel is fixing that in #93.
 
 ## Limits
 
