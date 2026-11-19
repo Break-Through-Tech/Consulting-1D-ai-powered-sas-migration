@@ -423,3 +423,94 @@ def run_saved_steps(
         plan, runner,
         initial_macro_vars=initial_macro_vars, initial_datasets=initial_datasets,
     )
+
+
+def run_steps_report(
+    plan,
+    code_dir,
+    *,
+    reviewed,
+    initial_macro_vars=None,
+    initial_datasets=None,
+):
+    """Run saved code like run_saved_steps, but never stop at a failing step.
+
+    run_step_plan raises at the first failure. This keeps going and returns what
+    happened to every step, so a person (or a repair loop, #66) can see which step
+    failed and why, and which later steps could not run because of it.
+
+    Returns a dict:
+      steps       one entry per step, in plan order:
+                  {"id", "kind", "status", "error", "blocked_by"}
+                  status is "ok", "skipped" (a context step), "failed" or "blocked".
+                  error is the message of a failed or blocked step, else None.
+                  blocked_by lists the steps (or macro variables) that stopped it.
+      counts      how many steps have each status.
+      datasets    every dataset produced, plus the ones passed in.
+      macro_vars  every macro variable resolved, plus the ones passed in.
+
+    `reviewed` must be True: read the files first. Generated code runs with full
+    access to this computer.
+    """
+    if reviewed is not True:
+        raise StepExecutionError(
+            "Saved code has not been marked as reviewed. Read the files in "
+            f"{code_dir} first, then pass reviewed=True."
+        )
+    saved = SavedStepCode(code_dir)
+    saved.check(plan)
+    runner = StepRunner(saved, lambda step, code: True, max_attempts=1)
+
+    macro_vars = dict(initial_macro_vars or {})
+    datasets = dict(initial_datasets or {})
+    steps = []
+    status_of = {}
+
+    for step in plan:
+        entry = {"id": step["id"], "kind": step["kind"], "status": None, "error": None, "blocked_by": []}
+        steps.append(entry)
+
+        # Resolve macro variables the way run_step_plan does.
+        must_set, unresolved = [], []
+        for name, value in step.get("macro_vars", {}).items():
+            if isinstance(value, str):
+                description = value.strip().lower()
+                if description == "macro parameter":
+                    continue
+                if description.startswith("runtime ("):
+                    if "set in this step" in description:
+                        must_set.append(name)
+                    elif name not in macro_vars:
+                        unresolved.append(name)
+                    continue
+            macro_vars[name] = value
+
+        if step.get("action") == "skip":
+            entry["status"] = "skipped"
+        else:
+            blocked_by = [
+                dependency for dependency in step.get("depends_on", [])
+                if status_of.get(dependency) not in ("ok", "skipped")
+            ]
+            if blocked_by or unresolved:
+                entry["status"] = "blocked"
+                entry["blocked_by"] = blocked_by + [f"macro variable {name}" for name in unresolved]
+                entry["error"] = "waiting for " + ", ".join(entry["blocked_by"])
+            else:
+                try:
+                    result = runner.execute_step(step, dict(macro_vars), dict(datasets))
+                    returned = result.get("macro_vars", {})
+                    not_set = [name for name in must_set if name not in returned]
+                    if not_set:
+                        raise StepExecutionError(f"{step['id']}: runtime macro variables not set: {not_set}.")
+                    datasets.update(result.get("datasets", {}))
+                    macro_vars.update(returned)
+                    entry["status"] = "ok"
+                except Exception as error:
+                    entry["status"] = "failed"
+                    entry["error"] = f"{type(error).__name__}: {error}"
+        status_of[step["id"]] = entry["status"]
+
+    counts = {status: sum(entry["status"] == status for entry in steps)
+              for status in ("ok", "skipped", "failed", "blocked")}
+    return {"steps": steps, "counts": counts, "datasets": datasets, "macro_vars": macro_vars}
