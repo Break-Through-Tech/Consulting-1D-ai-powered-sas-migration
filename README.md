@@ -74,6 +74,7 @@ Run these from the main project folder.
 - `docs/step_runner.md`: Programs 0 and 2, the translator, and how to run them.
 - `docs/validation_report.md`: checking the 10 outputs against SAS.
 - `docs/translation_history.md`: the saved record of translation attempts (Program 1).
+- `docs/workflow/program0.md`, `program1.md`, `program2.md`: what each SAS program does, step by step. Generated from the manifests: `python -m src.generate_docs`.
 
 ## Team
 
