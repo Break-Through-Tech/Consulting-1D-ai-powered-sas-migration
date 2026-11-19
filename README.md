@@ -67,6 +67,14 @@ Run these from the main project folder.
 - If a check fails, look at the failing rows. Don't raise the tolerance.
 - More details: `docs/program1_integration.md`
 
+## Docs
+
+- `docs/DOCUMENTATION_sas_reader.md`: how the SAS is split into steps (the manifests).
+- `docs/program1_integration.md`: Program 1 generate, review, run, and the feedback loop.
+- `docs/step_runner.md`: Programs 0 and 2, the translator, and how to run them.
+- `docs/validation_report.md`: checking the 10 outputs against SAS.
+- `docs/translation_history.md`: the saved record of translation attempts (Program 1).
+
 ## Team
 
 | Name | GitHub |
