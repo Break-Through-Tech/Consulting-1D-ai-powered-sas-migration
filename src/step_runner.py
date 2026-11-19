@@ -81,12 +81,37 @@ def _expand_ranges(text):
     return names
 
 
-class SasFrame(pd.DataFrame):
-    """A DataFrame whose column lookups ignore case, like SAS (df['Measure_Name'] finds measure_name).
+def _match_column(columns, key):
+    """The column that `key` means, ignoring case, or `key` itself.
 
-    Only df[name] and df[name] = value are affected, and only when the exact name is
-    missing and exactly one column matches ignoring case. Generated code reads columns
-    under a different case than the one that made them, and SAS accepts that.
+    Only a text name that is not an exact column, and that matches exactly one column
+    ignoring case, is changed. Anything else is left for pandas to handle.
+    """
+    if isinstance(key, str) and key not in columns:
+        matches = [c for c in columns if isinstance(c, str) and c.upper() == key.upper()]
+        if len(matches) == 1:
+            return matches[0]
+    return key
+
+
+def _match_columns(columns, keys):
+    """_match_column for one name or a list of names. Other objects (masks, functions) pass through."""
+    if isinstance(keys, (list, tuple)):
+        return type(keys)(_match_column(columns, key) for key in keys)
+    return _match_column(columns, keys)
+
+
+class SasFrame(pd.DataFrame):
+    """A DataFrame whose column names ignore case, like SAS (df['Measure_Name'] finds measure_name).
+
+    Works for df[name], df[[names]], df[name] = value, sort_values(by=), drop(columns=),
+    groupby(by), dropna(subset=), drop_duplicates(subset=) and merge(on=, left_on=, right_on=).
+    A name is changed only when the exact name is missing and exactly one column matches
+    ignoring case. Generated code reads columns under a different case than the one that
+    made them, and SAS accepts that.
+
+    Not covered: `'x' in df.columns` (use expand_name_list for name lists), `pd.merge(a, b, on=)`
+    as a function, and the column picked after a groupby (`df.groupby('g')['V']`).
     """
 
     @property
@@ -94,17 +119,59 @@ class SasFrame(pd.DataFrame):
         return SasFrame
 
     def _match(self, key):
-        if isinstance(key, str) and key not in self.columns:
-            matches = [c for c in self.columns if isinstance(c, str) and c.upper() == key.upper()]
-            if len(matches) == 1:
-                return matches[0]
-        return key
+        return _match_columns(self.columns, key)
 
     def __getitem__(self, key):
         return super().__getitem__(self._match(key))
 
     def __setitem__(self, key, value):
         super().__setitem__(self._match(key), value)
+
+    def sort_values(self, by=None, *args, **kwargs):
+        if kwargs.get("axis", 0) in (0, "index"):
+            by = self._match(by)
+        return super().sort_values(by, *args, **kwargs)
+
+    def drop(self, labels=None, *args, **kwargs):
+        if kwargs.get("axis", 0) in (1, "columns"):
+            labels = self._match(labels)
+        if "columns" in kwargs:
+            kwargs["columns"] = self._match(kwargs["columns"])
+        return super().drop(labels, *args, **kwargs)
+
+    def groupby(self, by=None, *args, **kwargs):
+        return super().groupby(self._match(by), *args, **kwargs)
+
+    def dropna(self, *args, **kwargs):
+        if "subset" in kwargs:
+            kwargs["subset"] = self._match(kwargs["subset"])
+        return super().dropna(*args, **kwargs)
+
+    def drop_duplicates(self, *args, **kwargs):
+        if "subset" in kwargs:
+            kwargs["subset"] = self._match(kwargs["subset"])
+        return super().drop_duplicates(*args, **kwargs)
+
+    def merge(self, right, *args, **kwargs):
+        # SAS MERGE ... BY x matches x in both data sets whatever their case. When the
+        # two spellings differ, the right data set's column takes the left one's spelling.
+        if isinstance(right, pd.DataFrame):
+            if kwargs.get("on") is not None:
+                keys = kwargs["on"] if isinstance(kwargs["on"], (list, tuple)) else [kwargs["on"]]
+                renames = {}
+                for key in keys:
+                    left_name = _match_column(self.columns, key)
+                    right_name = _match_column(right.columns, key)
+                    if left_name != right_name and right_name in right.columns:
+                        renames[right_name] = left_name
+                if renames:
+                    right = right.rename(columns=renames)
+                kwargs["on"] = _match_columns(self.columns, kwargs["on"])
+            if kwargs.get("left_on") is not None:
+                kwargs["left_on"] = self._match(kwargs["left_on"])
+            if kwargs.get("right_on") is not None:
+                kwargs["right_on"] = _match_columns(right.columns, kwargs["right_on"])
+        return super().merge(right, *args, **kwargs)
 
 
 class SasNames(dict):
