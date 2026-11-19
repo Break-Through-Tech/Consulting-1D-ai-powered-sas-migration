@@ -41,13 +41,29 @@ def macro_name(step):
     return match.group(1).lower()
 
 
-def expand_name_list(text):
+def expand_name_list(text, columns=None):
     """Split a SAS variable list into names and expand ranges: 'A HAI_1-HAI_3' -> A HAI_1 HAI_2 HAI_3.
 
     A range is NAME<number>-NAME<number> (or NAME<number>-<number>) with the same
     NAME on both sides, counting up. Generated code gets this in its scope because
     every step that reads &measure_all needs it, and it is easy to get wrong.
+
+    With columns (for example df.columns), each name is returned spelled as in
+    columns, ignoring case, because SAS does: &measure_all says OP_18b and the data
+    column is OP_18B. A name with no matching column is returned as written.
     """
+    names = _expand_ranges(text)
+    if columns is None:
+        return names
+
+    spelling = {}
+    for column in columns:
+        if isinstance(column, str):
+            spelling.setdefault(column.upper(), column)
+    return [spelling.get(name.upper(), name) for name in names]
+
+
+def _expand_ranges(text):
     names = []
     for token in str(text).split():
         if "-" not in token:
