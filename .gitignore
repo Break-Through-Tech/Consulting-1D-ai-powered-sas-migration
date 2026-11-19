@@ -18,4 +18,6 @@ translation_history.json
 /output/program1_feedback/
 # Reports written by python -m src.validation_report.
 /output/validation_report/
+# Code written by python -m src.generate_steps. Read it first; do not commit it.
+/output/program*_generated_code/
 .venv/

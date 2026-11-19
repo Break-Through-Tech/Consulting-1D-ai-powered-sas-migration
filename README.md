@@ -8,7 +8,8 @@ Uses Gemini to turn SAS programs into Python, then checks that the Python gives 
 ## Status
 
 - **Program 1:** works. 5 real Gemini runs matched SAS on all 5 tables. The largest difference was `1.24e-14`.
-- **Programs 0 and 2:** the AI versions can't run yet. See issue #49.
+- **Program 0:** works on one real Gemini run. All 33 steps ran and all 3 outputs matched SAS (largest difference `1.57e-13`). Gemini's output changes between runs, so it is not stable yet. That run is saved as a test (`tests/fixtures/program0_generated/`). See `docs/step_runner.md`.
+- **Program 2:** the AI version can't run yet. It needs Program 1's results handed over (#72) and the translation (#33).
 
 ## Setup
 
@@ -45,6 +46,15 @@ Run these from the main project folder.
   python -m src.program1_integration
   ```
 - **Read that code** in `output/program1_reviewed_code/`. The next step runs it, and it can access your computer.
+- **Program 0 with Gemini** (uses your key; about 3 minutes on the free tier):
+  ```
+  python -m src.generate_steps 0 --min-interval 5
+  ```
+  Read every file in `output/program0_generated_code/`, then run and check them:
+  ```
+  python -m src.run_program 0 --code-dir output/program0_generated_code --reviewed
+  ```
+  To try it without a key, run the saved example: `python -m src.run_program 0 --code-dir tests/fixtures/program0_generated --reviewed`. More details: `docs/step_runner.md`
 - **Run the demo:**
   ```
   python -m streamlit run demo/demo_app.py
