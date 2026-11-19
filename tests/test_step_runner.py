@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from src.orchestrate import build_step_plan, run_step_plan
-from src.step_runner import StepExecutionError, StepRunner, expand_name_list, macro_name
+from src.step_runner import SasFrame, StepExecutionError, StepRunner, expand_name_list, macro_name
 from src.translator import GeminiSASTranslator
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -153,6 +153,56 @@ class StepRunnerTests(unittest.TestCase):
     def test_review_callback_is_required(self):
         with self.assertRaises(TypeError):
             StepRunner(FakeTranslator({}), None)
+
+
+class SasFrameTests(unittest.TestCase):
+    """Column lookups ignore case, as in SAS (#61)."""
+
+    def test_reading_a_column_under_another_case(self):
+        frame = SasFrame(pd.DataFrame({"measure_name": ["A"], "COL1": [1]}))
+
+        self.assertEqual(["A"], frame["measure_Name"].tolist())
+        self.assertEqual([1], frame["col1"].tolist())
+
+    def test_writing_a_column_under_another_case_replaces_it(self):
+        frame = SasFrame(pd.DataFrame({"measure_name": ["A"]}))
+        frame["Measure_Name"] = ["B"]
+
+        self.assertEqual(["measure_name"], list(frame.columns))
+        self.assertEqual(["B"], frame["measure_name"].tolist())
+
+    def test_a_new_name_still_creates_a_column(self):
+        frame = SasFrame(pd.DataFrame({"a": [1]}))
+        frame["b"] = [2]
+
+        self.assertEqual(["a", "b"], list(frame.columns))
+
+    def test_two_columns_that_differ_only_by_case_stay_exact(self):
+        frame = SasFrame(pd.DataFrame({"x": [1], "X": [2]}))
+
+        self.assertEqual([2], frame["X"].tolist())
+        with self.assertRaises(KeyError):
+            frame["xX"]
+
+    def test_a_missing_column_is_still_an_error(self):
+        with self.assertRaises(KeyError):
+            SasFrame(pd.DataFrame({"a": [1]}))["b"]
+
+    def test_the_class_survives_filtering_and_copying(self):
+        frame = SasFrame(pd.DataFrame({"COL1": [1, 200]}))
+        filtered = frame[frame["col1"] > 100].copy()
+
+        self.assertIsInstance(filtered, SasFrame)
+        self.assertEqual([200], filtered["Col1"].tolist())
+
+    def test_a_step_can_read_columns_under_the_wrong_case_and_returns_plain_frames(self):
+        plan = [data_step("s", inputs=("WORK.A",), outputs=("WORK.B",))]
+        code = {"s": "outputs = {'WORK.B': datasets['WORK.A'][datasets['WORK.A']['COL1'] > 100]}"}
+        runner = StepRunner(FakeTranslator(code), approve)
+        result = run_step_plan(plan, runner, initial_datasets={"WORK.A": pd.DataFrame({"col1": [1, 200]})})
+
+        self.assertEqual([200], result["datasets"]["WORK.B"]["col1"].tolist())
+        self.assertIs(type(result["datasets"]["WORK.B"]), pd.DataFrame)
 
 
 class ExpandNameListTests(unittest.TestCase):

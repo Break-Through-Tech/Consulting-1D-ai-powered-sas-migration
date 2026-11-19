@@ -65,6 +65,32 @@ def expand_name_list(text):
     return names
 
 
+class SasFrame(pd.DataFrame):
+    """A DataFrame whose column lookups ignore case, like SAS (df['Measure_Name'] finds measure_name).
+
+    Only df[name] and df[name] = value are affected, and only when the exact name is
+    missing and exactly one column matches ignoring case. Generated code reads columns
+    under a different case than the one that made them, and SAS accepts that.
+    """
+
+    @property
+    def _constructor(self):
+        return SasFrame
+
+    def _match(self, key):
+        if isinstance(key, str) and key not in self.columns:
+            matches = [c for c in self.columns if isinstance(c, str) and c.upper() == key.upper()]
+            if len(matches) == 1:
+                return matches[0]
+        return key
+
+    def __getitem__(self, key):
+        return super().__getitem__(self._match(key))
+
+    def __setitem__(self, key, value):
+        super().__setitem__(self._match(key), value)
+
+
 class SasNames(dict):
     """A dict whose keys ignore case, like SAS dataset names (WORK.X is work.x).
 
@@ -200,7 +226,7 @@ class StepRunner:
         scope = self._scope()
         # Copies, so a step cannot change a dataset that later steps still need.
         scope["datasets"] = SasNames(
-            {name: datasets[name].copy(deep=True) for name in step.get("inputs", [])}
+            {name: SasFrame(datasets[name].copy(deep=True)) for name in step.get("inputs", [])}
         )
         scope["macro_vars"] = dict(macro_vars)
         self._exec(step, code, scope)
@@ -224,7 +250,8 @@ class StepRunner:
         # Only the declared outputs leave the step.
         return {
             "macro_vars": dict(new_macro_vars),
-            "datasets": {name: outputs[name] for name in step.get("outputs", [])},
+            # Plain DataFrames, so the case-insensitive lookups stay inside the step.
+            "datasets": {name: pd.DataFrame(outputs[name]) for name in step.get("outputs", [])},
         }
 
 
