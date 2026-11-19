@@ -17,6 +17,7 @@ from __future__ import annotations
 import ast
 import inspect
 import re
+import time
 from pathlib import Path
 from typing import Callable, List
 
@@ -38,6 +39,71 @@ def macro_name(step):
     if not match:
         raise StepExecutionError(f"{step['id']}: no %macro definition found in the SAS code.")
     return match.group(1).lower()
+
+
+def expand_name_list(text):
+    """Split a SAS variable list into names and expand ranges: 'A HAI_1-HAI_3' -> A HAI_1 HAI_2 HAI_3.
+
+    A range is NAME<number>-NAME<number> (or NAME<number>-<number>) with the same
+    NAME on both sides, counting up. Generated code gets this in its scope because
+    every step that reads &measure_all needs it, and it is easy to get wrong.
+    """
+    names = []
+    for token in str(text).split():
+        if "-" not in token:
+            names.append(token)
+            continue
+        left, right = token.split("-", 1)
+        start = re.fullmatch(r"(.*?)(\d+)", left)
+        end = re.fullmatch(r"(.*?)(\d+)", right)
+        if not start or not end or end.group(1) not in ("", start.group(1)):
+            raise ValueError(f"Cannot expand the SAS name range {token!r}.")
+        first, last = int(start.group(2)), int(end.group(2))
+        if last < first:
+            raise ValueError(f"Cannot expand the SAS name range {token!r}: it counts down.")
+        names.extend(f"{start.group(1)}{number}" for number in range(first, last + 1))
+    return names
+
+
+class SasNames(dict):
+    """A dict whose keys ignore case, like SAS dataset names (WORK.X is work.x).
+
+    Generated code often builds a dataset name from a macro variable such as
+    quarter ('Jul'), which gives a different case than the manifest ('JUL').
+    """
+
+    def __init__(self, items=()):
+        super().__init__()
+        self.update(items)
+
+    @staticmethod
+    def _key(key):
+        return key.upper() if isinstance(key, str) else key
+
+    def __getitem__(self, key):
+        return super().__getitem__(self._key(key))
+
+    def __setitem__(self, key, value):
+        super().__setitem__(self._key(key), value)
+
+    def __contains__(self, key):
+        return super().__contains__(self._key(key))
+
+    def __delitem__(self, key):
+        super().__delitem__(self._key(key))
+
+    def get(self, key, default=None):
+        return super().get(self._key(key), default)
+
+    def pop(self, key, *default):
+        return super().pop(self._key(key), *default)
+
+    def setdefault(self, key, default=None):
+        return super().setdefault(self._key(key), default)
+
+    def update(self, items=(), **named):
+        for key, value in dict(items, **named).items():
+            self[key] = value
 
 
 class StepRunner:
@@ -88,7 +154,8 @@ class StepRunner:
 
     def _scope(self):
         # Fresh scope per step, so one step cannot see another step's variables.
-        return {"pd": pd, "np": np, "List": List, "sas_procs": sas_procs, **self.macros}
+        return {"pd": pd, "np": np, "List": List, "sas_procs": sas_procs,
+                "expand_name_list": expand_name_list, **self.macros}
 
     def _approve(self, step, code):
         if not isinstance(code, str) or not code.strip():
@@ -132,13 +199,16 @@ class StepRunner:
 
         scope = self._scope()
         # Copies, so a step cannot change a dataset that later steps still need.
-        scope["datasets"] = {name: datasets[name].copy(deep=True) for name in step.get("inputs", [])}
+        scope["datasets"] = SasNames(
+            {name: datasets[name].copy(deep=True) for name in step.get("inputs", [])}
+        )
         scope["macro_vars"] = dict(macro_vars)
         self._exec(step, code, scope)
 
         outputs = scope.get("outputs")
         if not isinstance(outputs, dict):
             raise StepExecutionError(f"{step['id']}: generated code must assign a dict named 'outputs'.")
+        outputs = SasNames(outputs)
         missing = [name for name in step.get("outputs", []) if name not in outputs]
         if missing:
             raise StepExecutionError(f"{step['id']}: outputs is missing {missing}.")
@@ -174,6 +244,17 @@ def _signature(name, code):
     return None
 
 
+def _code_problem(code):
+    """Why saved code would be rejected, or None. Compiles only; nothing runs."""
+    if not isinstance(code, str) or not code.strip():
+        return "the translator returned no Python code."
+    try:
+        compile(code, "step.py", "exec")
+    except SyntaxError as error:
+        return f"generated code is not valid Python: {error}"
+    return None
+
+
 def generate_step_code(
     translator,
     plan,
@@ -181,12 +262,17 @@ def generate_step_code(
     *,
     max_attempts=3,
     retry_delay_seconds=2.0,
+    min_interval_seconds=0.0,
+    max_syntax_attempts=3,
 ):
     """Translate every step of a plan and save <step id>.py files. Runs no generated code.
 
     Returns {step id: path}. The directory must be new or empty, so versions
-    are never mixed.
+    are never mixed. min_interval_seconds waits between requests, for API plans
+    with a per-minute limit (the Gemini free tier allows 15 requests a minute).
     """
+    if min_interval_seconds < 0:
+        raise ValueError("min_interval_seconds cannot be negative.")
     code_dir = Path(code_dir)
     if code_dir.exists() and any(code_dir.iterdir()):
         raise FileExistsError(
@@ -196,29 +282,39 @@ def generate_step_code(
 
     signatures = {}
     files = {}
+    first_request = True
     for step in plan:
         if step.get("action") != "translate":
             continue
 
-        if step["kind"] == "macro":
-            name = macro_name(step)
-            operation = lambda step=step, name=name: translator.translate_macro_definition(step, name)
-        else:
+        if min_interval_seconds and not first_request:
+            time.sleep(min_interval_seconds)
+        first_request = False
+
+        name = macro_name(step) if step["kind"] == "macro" else None
+
+        def request(feedback=None, step=step, name=name):
             # Runtime macro values are not known yet. The prompt tells the AI to read
             # them from macro_vars, so the placeholder text stays in the request.
-            operation = lambda step=step: translator.translate_step(
-                step, dict(step.get("macro_vars", {})), dict(signatures)
+            extra = {"feedback": feedback} if feedback else {}
+            if name:
+                return translator.translate_macro_definition(step, name, **extra)
+            return translator.translate_step(
+                step, dict(step.get("macro_vars", {})), dict(signatures), **extra
             )
 
-        code, _attempts = retry_call(
-            operation, max_attempts=max_attempts, delay_seconds=retry_delay_seconds,
-        )
-        if not isinstance(code, str) or not code.strip():
-            raise ValueError(f"{step['id']}: the translator returned no Python code.")
-        try:
-            compile(code, f"{step['id']}.py", "exec")  # syntax check only, nothing runs
-        except SyntaxError as error:
-            raise ValueError(f"{step['id']}: generated code is not valid Python: {error}") from error
+        feedback = None
+        for syntax_attempt in range(1, max_syntax_attempts + 1):
+            code, _attempts = retry_call(
+                lambda: request(feedback), max_attempts=max_attempts, delay_seconds=retry_delay_seconds,
+            )
+            problem = _code_problem(code)
+            if problem is None:
+                break
+            if syntax_attempt == max_syntax_attempts:
+                raise ValueError(f"{step['id']}: {problem}")
+            # At temperature 0 the same request gives the same answer, so say what was wrong.
+            feedback = f"Your previous answer was rejected: {problem}"
 
         if step["kind"] == "macro":
             signature = _signature(name, code)

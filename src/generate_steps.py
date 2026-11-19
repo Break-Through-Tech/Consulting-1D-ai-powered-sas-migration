@@ -22,6 +22,10 @@ def main(argv=None, translator=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("program", choices=["0", "2"], help="SAS program to translate")
     parser.add_argument("--code-dir", help="where to save the code (must be new or empty)")
+    parser.add_argument(
+        "--min-interval", type=float, default=0.0, metavar="SECONDS",
+        help="wait between requests; use 5 on the Gemini free tier (15 requests a minute)",
+    )
     args = parser.parse_args(argv)
 
     code_dir = Path(args.code_dir) if args.code_dir else ROOT / "output" / f"program{args.program}_generated_code"
@@ -32,7 +36,7 @@ def main(argv=None, translator=None):
         from src.translator import GeminiSASTranslator
         translator = GeminiSASTranslator()
 
-    files = generate_step_code(translator, plan, code_dir)
+    files = generate_step_code(translator, plan, code_dir, min_interval_seconds=args.min_interval)
     print(f"Saved code for {len(files)} steps in {code_dir}")
     print("Read it before running it. It runs with full access to this computer.")
     return 0
