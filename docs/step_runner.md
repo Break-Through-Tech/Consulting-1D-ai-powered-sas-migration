@@ -55,6 +55,19 @@ A macro definition step must define one function named after the macro. A macro 
 
 It also returns `counts`, every `datasets` produced and every `macro_vars` resolved. `run_saved_steps` is the same flow, but stops at the first failure and raises.
 
+## The translator
+
+`GeminiSASTranslator` in `src/translator.py` has two sets of methods:
+
+| Program | Methods | Used by |
+|---|---|---|
+| 1 | `translate_macro`, `translate_group_step`, `repair_program1` | `src/program1_integration.py` (`docs/program1_integration.md`) |
+| 0 and 2 | `translate_macro_definition`, `translate_step` | `generate_step_code` in `src/step_runner.py` |
+
+Both sets share `_generate_code`, which makes the request. The Program 1 methods were not changed for Programs 0 and 2.
+
+**Where to put a new rule:** if Gemini keeps getting one thing wrong in a step, add one sentence to the right prompt constant in `src/translator.py`: `SAS_BEHAVIOUR_PROMPT` (how SAS behaves), `SAS_CONVENTIONS_PROMPT` (names and shapes), `SAS_PROCS_PROMPT` (the `sas_procs` helpers), `STEP_PROMPT` or `MACRO_DEFINITION_PROMPT`. Then generate again and check with `python -m src.run_program`.
+
 ## Prompts
 
 The rules live in `src/translator.py`, in `STEP_PROMPT`, `MACRO_DEFINITION_PROMPT` and the shared `SAS_BEHAVIOUR_PROMPT`, `SAS_CONVENTIONS_PROMPT` and `SAS_PROCS_PROMPT`. When a step goes wrong, add the rule there. Do not edit `manifests/*.json` by hand: the parser writes them, and a test checks they are up to date.

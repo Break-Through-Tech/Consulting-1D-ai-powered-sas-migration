@@ -1,13 +1,18 @@
-"""
-Code was generateed with the help of Google Gemini. 
-This script translates SAS macros and group steps into Python code using pandas and numpy, 
-ensuring parity with the original SAS logic.
+"""Gemini translation of SAS into pandas code.
+
+Code was written with the help of Google Gemini.
+
+GeminiSASTranslator has two sets of methods:
+- Program 1 (macro and group steps): translate_macro, translate_group_step and
+  repair_program1. Used by src/program1_integration.py (docs/program1_integration.md).
+- Programs 0 and 2 (macro definitions and plain steps): translate_macro_definition
+  and translate_step. Used by src/step_runner.py (docs/step_runner.md). The rules
+  Gemini is given for these are the *_PROMPT constants below.
 """
 import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib import response
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv

@@ -1,7 +1,7 @@
 # SAS Reader documentation
 
 Two parts:
-1. **Program 1 manifest (hand-written)**: issue #12, related #13 (Translator). Below.
+1. **Program 1 manifest (hand-written)**: issue #12. Below.
 2. **Automatic parser (Programs 0 and 2)**: issue #36. See "SAS Reader: automatic parser" further down. It generates `manifests/program0.json` and `manifests/program2.json`; `program1.json` stays hand-written.
 
 ## What this is
@@ -10,33 +10,34 @@ quality measures per hospital, in 5 groups (Mortality, Safety, Readmission, Pati
 Experience, Timely & Effective Care), averages the measures each hospital has in each group,
 then standardizes that average into a group score.
 
-This PR does not translate anything. It splits the SAS into small labelled steps so a
-Translator can convert them one at a time, and adds tests proving the split is accurate.
+The reader does not translate anything. It splits the SAS into small labelled steps so the
+translator can convert them one at a time, and tests prove the split is accurate.
 
-## What's in this PR
-- `manifests/program1.json`: 7 steps. Each has the exact SAS text, its source file and line
-  numbers, inputs, outputs, and notes. One step is the reusable macro `%grp_score`; five call
-  it once per group; one is context only.
-- `config/measure_groups.json`: which measure columns belong to each group, in order,
-  and the output file each group produces.
-- `tests/test_sas_reader.py`: checks that the JSON matches the real SAS files and CSVs.
+## Files
+- `manifests/program1.json`: 7 steps, written by hand. Each has the exact SAS text, its source
+  file and line numbers, inputs, outputs, and notes. One step is the reusable macro `%grp_score`;
+  five call it once per group; one is context only.
+- `manifests/program0.json` and `manifests/program2.json`: written by the parser (see below).
+- `config/measure_groups.json`: which measure columns belong to each group, in order, and the
+  output file each group produces.
+- `tests/test_sas_reader.py`: checks that `program1.json` matches the real SAS files and CSVs.
 
-Both JSON files were written by hand for this prototype. Automating the split can come later;
-the format and the tests would not change.
+## Who reads the manifests
+- **Program 1:** `src/program1_integration.py` and `src/orchestrate.py` translate `grp_score_macro`
+  once, then call it for the five group steps with the measure lists from `config/measure_groups.json`.
+  Follow the SAS behaviours in the macro's notes: missing values in sums, n-1 standard deviation,
+  merge on text `PROVIDER_ID`, exact output column order. See `docs/program1_integration.md`.
+- **Programs 0 and 2:** `build_step_plan` in `src/orchestrate.py` reads the manifest,
+  `generate_step_code` in `src/step_runner.py` asks Gemini for one file per step, and
+  `run_steps_report` runs the reviewed files. See `docs/step_runner.md`.
+- **Validation:** `src/validate.py` and `src/validation_report.py` compare the results with the five
+  Program 1 and the five Program 0/2 SAS output CSVs in `data/Project_1/SAS Output CSV/`, using a
+  numeric tolerance. See `docs/validation_report.md`.
 
-## For the reviewer
-1. Run `python -m unittest discover tests -v`. All 8 tests should pass.
-2. Spot-check one step: open its `source_file` at `line_start` to `line_end` and compare with `sas_code`.
-3. Check `macro_vars` and `notes` for one group step against its `%grp_score(...)` call.
-4. Confirm that nothing under `data/` and no `.sas` file changed (`git diff --stat main`).
-
-## For the Translator (issue #13)
-Start with `manifests/program1.json`. Translate `grp_score_macro` once as a Python function,
-then call it for the five group steps, taking each measure list from
-`config/measure_groups.json`. Follow the SAS behaviors in the `grp_score_macro` notes: missing
-values in sums, n-1 standard deviation, merge on text `PROVIDER_ID`, exact output column order.
-Check your results against the five SAS output CSVs in `data/Project_1/SAS Output CSV/`,
-using a numeric tolerance.
+## Check it
+Run `python -m unittest discover tests -v`. To spot-check a step, open its `source_file` at
+`line_start` to `line_end` and compare with `sas_code`. Nothing under `data/` and no `.sas` file
+should change.
 
 ---
 
@@ -50,6 +51,7 @@ generated with it (Task #4: "break Programs 0 and 2 into small steps").
 ```
 SAS file ──► src/sas_reader (parser, no AI) ──► manifests/programN.json ──► translator (Gemini) ──► pipeline ──► validator
 ```
+For Programs 0 and 2 the middle is `build_step_plan` → `generate_step_code` → review → `run_steps_report`.
 The parser only splits SAS into steps. It never calls an AI or runs Python, so the
 same file always gives the same manifest.
 
@@ -101,14 +103,5 @@ Same fields as `program1.json`, plus two:
 
 ## Scope and limits
 - Only the SAS in our 4 files (Parker: a general SAS parser isn't required). Anything else is marked `unsupported`, never guessed.
-- Macros are not expanded or run; runtime macro values (`INTO :`, `call symputx`) aren't computed.
+- Macros are not expanded or run. Runtime macro values (`INTO :`, `call symputx`) are not computed by the parser: the manifest records which step sets each one (`runtime (set by <step>)`), and the step runner supplies the value when that step runs (`new_macro_vars`, see `docs/step_runner.md`).
 - `%if/%do/%end` is handled only inside a DATA step (the one place it appears, Program 0 line 130).
-
-## What teammates need to do
-| Who | What |
-|---|---|
-| Amanda (#37) | Translate `manifests/program0.json`. `kind: "step"` is new: translate it like a group step (SAS code + inputs/outputs + macro_vars → Python), one step at a time in `depends_on` order. Program 1 is unchanged. |
-| Lizzette (#32, #34) | To run Program 0/2 through `src/orchestrate.py`, add `"step"` to `ALLOWED_KINDS`. Program 1 runs as before. |
-| Hao (#38) | Bare output names are the answer-key tables; ignore `WORK.` names. Program 0's are `LESS100_MEASURE`, `MEASURE_AVERAGE_STDDEV_2025JUL` and `STD_DATA_2025JUL_ANALYSIS`. |
-| Pawanjit (#44) | Optional demo section: dropdown of the SAS files → `parse_program()` → table of steps → a step's SAS next to its saved Python. No live AI call needed. |
-| Shane (#43) | `sas_type` and `kind` let you report results per step type (e.g. first-try success for `proc sql` vs `data`). |
