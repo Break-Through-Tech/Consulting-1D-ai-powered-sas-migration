@@ -9,7 +9,7 @@ Uses Gemini to turn SAS programs into Python, then checks that the Python gives 
 
 - **Program 1:** works. 5 real Gemini runs matched SAS on all 5 tables. The largest difference was `1.24e-14`.
 - **Program 0:** works on one real Gemini run. All 33 steps ran and all 3 outputs matched SAS (largest difference `1.57e-13`). Gemini's output changes between runs, so it is not stable yet. That run is saved as a test (`tests/fixtures/program0_generated/`). See `docs/step_runner.md`.
-- **Program 2:** `run_program 2` can run it, starting from the SAS outputs of Programs 0 and 1 (#72). The AI translation that passes is still to do (#33).
+- **Program 2:** works on one real Gemini run. All 31 steps ran and both outputs matched SAS (largest difference `4.44e-15`). It starts from the SAS outputs of Programs 0 and 1, not from AI outputs, and Gemini's output changes between runs, so it is not stable yet. That run is saved as a test (`tests/fixtures/program2_generated/`). See `docs/step_runner.md`.
 
 ## Setup
 
@@ -54,7 +54,7 @@ Run these from the main project folder.
   ```
   python -m src.run_program 0 --code-dir output/program0_generated_code --reviewed
   ```
-  To try it without a key, run the saved example: `python -m src.run_program 0 --code-dir tests/fixtures/program0_generated --reviewed`. More details: `docs/step_runner.md`
+  To try it without a key, run the saved examples: `python -m src.run_program 0 --code-dir tests/fixtures/program0_generated --reviewed` and `python -m src.run_program 2 --code-dir tests/fixtures/program2_generated --reviewed`. More details: `docs/step_runner.md`
 - **Run the demo:**
   ```
   python -m streamlit run demo/demo_app.py
