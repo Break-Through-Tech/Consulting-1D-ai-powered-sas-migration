@@ -42,7 +42,8 @@ A macro definition step must define one function named after the macro. A macro 
 ## SAS ignores case, pandas does not
 
 - **Dataset names** ignore case (`SasNames`). `WORK.ALL_DATA_2025Jul` finds `WORK.ALL_DATA_2025JUL`.
-- **Column reads and writes** ignore case when exactly one column matches (`SasFrame`): `df['measure_Name']` finds `measure_name`. This does not cover `'x' in df.columns`, so name lists go through `expand_name_list(text, df.columns)`, which returns the real spelling.
+- **Column names** ignore case when exactly one column matches (`SasFrame`): `df['measure_Name']` finds `measure_name`. This works for a single name, a list (`df[['A', 'B']]`), `sort_values(by=)`, `drop(columns=)`, `groupby(by)`, `dropna(subset=)`, `drop_duplicates(subset=)` and `merge(on=, left_on=, right_on=)`. In a merge, the right frame's column takes the left frame's spelling, as in SAS.
+- **Not covered:** `'x' in df.columns` (so name lists go through `expand_name_list(text, df.columns)`, which returns the real spelling), `pd.merge(a, b, on=)` as a function, and the column picked after a groupby (`df.groupby('g')['V']`).
 
 ## Results of a run
 

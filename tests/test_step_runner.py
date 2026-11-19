@@ -195,6 +195,99 @@ class SasFrameTests(unittest.TestCase):
         self.assertIsInstance(filtered, SasFrame)
         self.assertEqual([200], filtered["Col1"].tolist())
 
+    def test_a_list_of_columns_under_other_cases(self):
+        frame = SasFrame(pd.DataFrame({"PROVIDER_ID": ["1"], "grp_score": [2.0], "x": [3]}))
+        picked = frame[["provider_id", "GRP_SCORE"]]
+
+        self.assertEqual(["PROVIDER_ID", "grp_score"], list(picked.columns))
+        self.assertIsInstance(picked, SasFrame)
+
+    def test_a_list_may_mix_exact_and_other_case_names_and_masks_still_work(self):
+        frame = SasFrame(pd.DataFrame({"A": [1, 2], "b": [3, 4]}))
+
+        self.assertEqual(["A", "b"], list(frame[["A", "B"]].columns))
+        self.assertEqual([2], frame[[False, True]]["A"].tolist())
+        with self.assertRaises(KeyError):
+            frame[["a", "zzz"]]
+
+    def test_writing_a_list_of_columns_under_other_cases(self):
+        frame = SasFrame(pd.DataFrame({"A": [1], "B": [2]}))
+        frame[["a", "b"]] = [[10, 20]]
+
+        self.assertEqual(["A", "B"], list(frame.columns))
+        self.assertEqual([10], frame["A"].tolist())
+
+    def test_sort_values_by_another_case(self):
+        frame = SasFrame(pd.DataFrame({"A": [2, 1], "b": ["x", "y"]}))
+
+        self.assertEqual([1, 2], frame.sort_values(by="a")["A"].tolist())
+        self.assertEqual([1, 2], frame.sort_values("a", ascending=True)["A"].tolist())
+        self.assertEqual([2, 1], frame.sort_values(by=["B", "a"], ascending=[True, True])["A"].tolist())
+
+    def test_drop_columns_by_another_case(self):
+        frame = SasFrame(pd.DataFrame({"A": [1], "b": [2], "c": [3]}))
+
+        self.assertEqual(["c"], list(frame.drop(columns=["a", "B"]).columns))
+        self.assertEqual(["b", "c"], list(frame.drop(columns="a").columns))
+        self.assertEqual(["b", "c"], list(frame.drop("a", axis=1).columns))
+
+    def test_groupby_by_another_case(self):
+        frame = SasFrame(pd.DataFrame({"G": ["x", "x", "y"], "v": [1, 2, 3]}))
+
+        self.assertEqual({"x": 3, "y": 3}, frame.groupby("g")["v"].sum().to_dict())
+        self.assertEqual({("x",): 2, ("y",): 1}, {k: len(v) for k, v in frame.groupby(["g"])})
+
+    def test_dropna_and_drop_duplicates_subset_by_another_case(self):
+        frame = SasFrame(pd.DataFrame({"A": [1, None, 1], "B": [1, 2, 1]}))
+
+        self.assertEqual(2, len(frame.dropna(subset=["a"])))
+        self.assertEqual(2, len(frame.drop_duplicates(subset=["a", "b"])))
+
+    def test_merge_on_a_name_spelled_differently_in_each_frame(self):
+        left = SasFrame(pd.DataFrame({"PROVIDER_ID": ["1", "2"], "x": [1, 2]}))
+        right = pd.DataFrame({"provider_id": ["1", "2"], "y": [3, 4]})
+
+        merged = left.merge(right, on="provider_id", how="inner")
+
+        self.assertEqual(["PROVIDER_ID", "x", "y"], list(merged.columns))
+        self.assertEqual([3, 4], merged["y"].tolist())
+
+    def test_merge_with_left_on_and_right_on_and_a_list_of_keys(self):
+        left = SasFrame(pd.DataFrame({"A": [1, 2], "B": [1, 2], "x": [5, 6]}))
+        right = pd.DataFrame({"a": [1, 2], "b": [1, 2], "y": [7, 8]})
+
+        self.assertEqual(["A", "B", "x", "y"], list(left.merge(right, on=["a", "b"]).columns))
+        other = pd.DataFrame({"K": [1, 2], "y": [7, 8]})
+        self.assertEqual([7, 8], left.merge(other, left_on="a", right_on="k")["y"].tolist())
+
+    def test_a_missing_name_is_still_an_error_everywhere(self):
+        frame = SasFrame(pd.DataFrame({"A": [1]}))
+
+        for call in (lambda: frame.sort_values(by="zzz"), lambda: frame.drop(columns=["zzz"]),
+                     lambda: frame.groupby("zzz"), lambda: frame.merge(frame, on="zzz")):
+            with self.assertRaises(KeyError):
+                call()
+
+    def test_two_columns_that_differ_only_by_case_stay_exact_in_a_list_and_sort(self):
+        frame = SasFrame(pd.DataFrame({"x": [2, 1], "X": [9, 8]}))
+
+        self.assertEqual([1, 2], frame.sort_values(by="x")["x"].tolist())
+        self.assertEqual([9, 8], frame[["X"]]["X"].tolist())
+        with self.assertRaises(KeyError):
+            frame.sort_values(by="xX")
+
+    def test_a_step_can_use_a_column_list_under_the_wrong_case(self):
+        plan = [data_step("s", inputs=("WORK.A",), outputs=("WORK.B",))]
+        code = {"s": "outputs = {'WORK.B': datasets['WORK.A'][['PROVIDER_ID', 'GRP_SCORE']].sort_values(by='grp_score')}"}
+        runner = StepRunner(FakeTranslator(code), approve)
+        result = run_step_plan(
+            plan, runner,
+            initial_datasets={"WORK.A": pd.DataFrame({"provider_id": ["a", "b"], "grp_score": [2.0, 1.0], "z": [0, 0]})},
+        )
+
+        self.assertEqual(["b", "a"], result["datasets"]["WORK.B"]["provider_id"].tolist())
+        self.assertIs(type(result["datasets"]["WORK.B"]), pd.DataFrame)
+
     def test_a_step_can_read_columns_under_the_wrong_case_and_returns_plain_frames(self):
         plan = [data_step("s", inputs=("WORK.A",), outputs=("WORK.B",))]
         code = {"s": "outputs = {'WORK.B': datasets['WORK.A'][datasets['WORK.A']['COL1'] > 100]}"}
