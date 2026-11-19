@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import pandas as pd
@@ -36,9 +37,22 @@ class FlakyTranslator(FakeTranslator):
         if self.requests <= self.failures:
             raise self.error("try again")
 
-    def translate_step(self, step, macro_vars, macros):
+    def translate_step(self, step, macro_vars, macros, feedback=None):
         self._maybe_fail()
-        return super().translate_step(step, macro_vars, macros)
+        return super().translate_step(step, macro_vars, macros, feedback)
+
+
+class SequenceTranslator(FakeTranslator):
+    """Answers each request for a step with the next canned reply, and keeps the feedback."""
+
+    def __init__(self, replies):
+        super().__init__({})
+        self.replies = list(replies)
+        self.feedbacks = []
+
+    def translate_step(self, step, macro_vars, macros, feedback=None):
+        self.feedbacks.append(feedback)
+        return self.replies.pop(0)
 
 
 PLAN = [macro_step(), data_step(depends=["double_macro"])]
@@ -109,11 +123,48 @@ class GenerateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "not valid Python"):
                 generate_step_code(FakeTranslator(code), PLAN, Path(directory) / "gen")
 
+    def test_invalid_code_is_asked_again_with_the_error(self):
+        bad = "x = 1; for m in [1]: x = m"
+        translator = SequenceTranslator([bad, "outputs = {}"])
+        with tempfile.TemporaryDirectory() as directory:
+            files = generate_step_code(
+                translator, [data_step("s", inputs=(), outputs=())], Path(directory) / "gen",
+            )
+            saved = files["s"].read_text(encoding="utf-8")
+
+        self.assertEqual("outputs = {}", saved)
+        self.assertIsNone(translator.feedbacks[0])
+        self.assertIn("not valid Python", translator.feedbacks[1])
+
+    def test_gives_up_when_the_code_stays_invalid(self):
+        translator = SequenceTranslator(["x = (", "x = (", "x = ("])
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "not valid Python"):
+                generate_step_code(
+                    translator, [data_step("s", inputs=(), outputs=())], Path(directory) / "gen",
+                )
+
+        self.assertEqual(3, len(translator.feedbacks))
+
     def test_rejects_macro_code_without_the_named_function(self):
         code = {**CODE, "double_macro": "def other(df):\n    return df\n"}
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "'double'"):
                 generate_step_code(FakeTranslator(code), PLAN, Path(directory) / "gen")
+
+    def test_waits_between_requests_but_not_before_the_first(self):
+        plan = [data_step(name, inputs=(), outputs=()) for name in ("a", "b", "c")]
+        code = {name: "outputs = {}" for name in ("a", "b", "c")}
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch("src.step_runner.time.sleep") as sleep:
+                generate_step_code(FakeTranslator(code), plan, Path(directory) / "gen", min_interval_seconds=5)
+
+        self.assertEqual([unittest.mock.call(5), unittest.mock.call(5)], sleep.call_args_list)
+
+    def test_rejects_a_negative_interval(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                generate_step_code(FakeTranslator({}), [], Path(directory) / "gen", min_interval_seconds=-1)
 
     def test_generation_retries_temporary_errors(self):
         translator = FlakyTranslator({"s": "outputs = {}"}, failures=1)

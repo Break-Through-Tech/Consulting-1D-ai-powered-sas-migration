@@ -38,16 +38,58 @@ SAS_PROCS_PROMPT = (
     "They are already in scope: "
     "fastclus(data, var, seed, *, maxc, maxiter=1, converge=0.02, strict=None) "
     "returns an object with .cluster_centers, .out and .converged; "
-    "univariate_percentiles(data, var, pctlpts, pctlpre='P') returns a one-row DataFrame."
+    "univariate_percentiles(data, var, pctlpts, pctlpre='P') returns a one-row DataFrame. "
+    "sas_procs has no other functions: for every other procedure, such as PROC MEANS, "
+    "write the pandas code yourself."
 )
 
 SAS_BEHAVIOUR_PROMPT = """
+CODE FORMAT: python_code must be ordinary multi-line Python with real line breaks and
+indentation. Never put several statements, loops or ifs on one line.
+
 SAS BEHAVIOURS TO PRESERVE:
 - Missing values: sum(of ...) and mean(of ...) skip missing values; comparisons with
   a missing number are not true; blank text counts as missing.
 - Standard deviations are sample standard deviations (ddof=1).
 - Keep PROVIDER_ID as a zero-padded string and keep SAS's column order and names.
 - Do not hardcode values from the SAS output or read files from disk.
+"""
+
+SAS_CONVENTIONS_PROMPT = """
+
+NAMES AND TYPES (SAS ignores case, pandas does not, so be exact):
+- Dataset keys in `datasets` and `outputs` ignore case, as in SAS. Copy them from the lists
+  in the request, for example 'WORK.MEASURE_VOLUME_T', and do not build them from macro
+  variables such as year or quarter.
+- Never read the same column under two cases. Use a column's name exactly as it appears in
+  the SAS code or the input dataset. SAS system columns are always UPPER case: _NAME_,
+  _LABEL_, COL1, _TYPE_, _PAGE_, _TABLE_, _FREQ_, _STAT_.
+- Macro variable values are strings. A list of names is one string: split it on whitespace.
+  Convert counts with int(). A SAS range such as HAI_1-HAI_6 in a name list means the six
+  names HAI_1 HAI_2 ... HAI_6. Do not expand it yourself: call the ready-made
+  expand_name_list(text), which returns the list of names with every range expanded.
+- Name every column you create in lower case, as the SAS code writes it (measure_in_name,
+  measure_in_std, measure_name), and use the same spelling in every step.
+- PROC SQL ... INTO :var SEPARATED BY '' NOTRIM joins character values that SAS pads to the
+  column width, so the padding separates the names. In Python join the names with one space.
+- A macro function receives what the SAS macro call passes: dataset parameters as DataFrames,
+  name lists as whitespace-separated strings, counts as int. Call it with datasets taken
+  from `datasets` and values taken from `macro_vars`; never pass a dataset name.
+
+SAS OUTPUT SHAPES:
+- PROC TABULATE DATA=d OUT=o; VAR a b; TABLE n*(a b); writes one row with the columns
+  _TYPE_, _PAGE_, _TABLE_, a_N, b_N (a_N is the count of non-missing values of a).
+  _TYPE_ is text ('0'); _PAGE_ and _TABLE_ are the number 1. Keep numeric columns numeric:
+  never put '' or other text in a column that holds numbers.
+- PROC TRANSPOSE DATA=o OUT=t; with no BY or ID turns every NUMERIC column of o into one row
+  with _NAME_ (the old column name), _LABEL_ (text, blank here) and COL1 (its value), in the
+  old column order. COL1 is numeric. The numeric columns include _PAGE_ and _TABLE_, which the
+  next DATA step filters out; the text column _TYPE_ is not transposed. Always write all three
+  columns _NAME_, _LABEL_ and COL1, because later steps drop _NAME_ and _LABEL_.
+- PROC MEANS DATA=d; VAR a b; OUTPUT OUT=o; (no statistic keywords) writes 5 rows in this
+  order: _STAT_ = N (count of non-missing), MIN, MAX, MEAN, STD (sample, ddof=1). Columns are
+  _TYPE_ (0), _FREQ_ (number of rows in d, the same in all 5 rows), _STAT_, then one column per
+  VAR variable holding that statistic. Use the variable names as they are, with no suffix.
 """
 
 MACRO_DEFINITION_PROMPT = """
@@ -62,7 +104,7 @@ function using pandas and numpy.
   (&name) are plain Python values.
 - Return only code that defines the function. pd, np, List and sas_procs are already
   imported. Do not run the function.
-""" + SAS_BEHAVIOUR_PROMPT + SAS_PROCS_PROMPT
+""" + SAS_BEHAVIOUR_PROMPT + SAS_CONVENTIONS_PROMPT + SAS_PROCS_PROMPT
 
 STEP_PROMPT = """
 You are an expert SAS-to-Python translator. Translate one SAS step into Python code
@@ -82,7 +124,7 @@ Your code must:
   re-implement it.
 - treat macro variable values that start with 'runtime (' as placeholders: the real value
   is in `macro_vars` when the code runs, so read it there and never copy the placeholder.
-""" + SAS_BEHAVIOUR_PROMPT + SAS_PROCS_PROMPT
+""" + SAS_BEHAVIOUR_PROMPT + SAS_CONVENTIONS_PROMPT + SAS_PROCS_PROMPT
 
 
 def _runtime_macro_vars(step_info: Dict[str, Any]) -> List[str]:
@@ -235,7 +277,8 @@ class GeminiSASTranslator:
         )
         return TranslationOutput.model_validate_json(response.text).python_code
 
-    def translate_macro_definition(self, step_info: Dict[str, Any], macro_name: str) -> str:
+    def translate_macro_definition(self, step_info: Dict[str, Any], macro_name: str,
+                                   feedback: Optional[str] = None) -> str:
         """Translate a SAS macro definition into one Python function.
 
         Used for Program 0 and 2 macros (%keep_hos, %report, %kmeans, ...).
@@ -251,7 +294,7 @@ class GeminiSASTranslator:
             fence,
             "Implementation notes from the manifest:",
             str(step_info.get("notes") or "None"),
-        ])
+        ] + ([feedback] if feedback else []))
         return self._generate_code(MACRO_DEFINITION_PROMPT, user_prompt)
 
     def translate_step(
@@ -259,6 +302,7 @@ class GeminiSASTranslator:
         step_info: Dict[str, Any],
         macro_vars: Dict[str, Any],
         macros: Dict[str, str],
+        feedback: Optional[str] = None,
     ) -> str:
         """Translate one DATA step, PROC step or macro call into Python.
 
@@ -282,7 +326,7 @@ class GeminiSASTranslator:
             fence,
             "Implementation notes from the manifest:",
             str(step_info.get("notes") or "None"),
-        ])
+        ] + ([feedback] if feedback else []))
         return self._generate_code(STEP_PROMPT, user_prompt)
 
 # ---------------------------------------------------------------------------

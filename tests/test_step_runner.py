@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from src.orchestrate import build_step_plan, run_step_plan
-from src.step_runner import StepExecutionError, StepRunner, macro_name
+from src.step_runner import StepExecutionError, StepRunner, expand_name_list, macro_name
 from src.translator import GeminiSASTranslator
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,11 +24,12 @@ class FakeTranslator:
         self.code = code
         self.asked = []
 
-    def translate_macro_definition(self, step, name):
+    def translate_macro_definition(self, step, name, feedback=None):
         self.asked.append(("macro", step["id"], name))
         return self.code[step["id"]]
 
-    def translate_step(self, step, macro_vars, macros):
+    def translate_step(self, step, macro_vars, macros, feedback=None):
+        self.feedback = feedback
         self.asked.append(("step", step["id"], dict(macro_vars), dict(macros)))
         return self.code[step["id"]]
 
@@ -140,9 +141,60 @@ class StepRunnerTests(unittest.TestCase):
 
             self.assertEqual("outputs = {}", (Path(directory) / "s.py").read_text(encoding="utf-8"))
 
+    def test_dataset_names_ignore_case_like_sas(self):
+        plan = [data_step("s", inputs=("WORK.ALL_DATA_2025JUL",), outputs=("WORK.OUT_2025JUL",))]
+        # Built from a macro variable, 'Jul' has a different case than the manifest's 'JUL'.
+        code = {"s": "name = 'work.all_data_2025' + 'Jul'\n"
+                     "outputs = {'WORK.Out_2025Jul': datasets[name]}"}
+        _, _, result = self.run_plan(plan, code, datasets={"WORK.ALL_DATA_2025JUL": pd.DataFrame({"x": [1]})})
+
+        self.assertEqual([1], result["datasets"]["WORK.OUT_2025JUL"]["x"].tolist())
+
     def test_review_callback_is_required(self):
         with self.assertRaises(TypeError):
             StepRunner(FakeTranslator({}), None)
+
+
+class ExpandNameListTests(unittest.TestCase):
+    def test_plain_names_and_ranges(self):
+        self.assertEqual(
+            ["COMP_HIP_KNEE", "HAI_1", "HAI_2", "HAI_3", "PSI_90_SAFETY"],
+            expand_name_list("COMP_HIP_KNEE HAI_1-HAI_3 PSI_90_SAFETY"),
+        )
+
+    def test_short_range_form_and_single_step_range(self):
+        self.assertEqual(["H_1", "H_2", "H_3"], expand_name_list("H_1-3"))
+        self.assertEqual(["A5"], expand_name_list("A5-A5"))
+
+    def test_runs_of_whitespace_are_ignored(self):
+        self.assertEqual(["A", "B"], expand_name_list("  A \n B  "))
+
+    def test_unusable_ranges_are_rejected(self):
+        for text in ("HAI_6-HAI_1", "HAI_1-OP_6", "A-B"):
+            with self.subTest(text=text):
+                with self.assertRaises(ValueError):
+                    expand_name_list(text)
+
+    def test_the_real_measure_list_expands_to_plain_names(self):
+        plan = build_step_plan(ROOT / "manifests" / "program0.json")
+        measure_all = next(step["macro_vars"]["measure_all"] for step in plan if "measure_all" in step["macro_vars"])
+        names = expand_name_list(measure_all)
+
+        self.assertIn("HAI_1", names)
+        self.assertIn("HAI_6", names)
+        self.assertFalse([name for name in names if "-" in name])
+
+    def test_it_is_in_the_scope_of_every_step(self):
+        plan = [data_step("s", inputs=(), outputs=("WORK.N",))]
+        code = {"s": "outputs = {'WORK.N': pd.DataFrame({'n': expand_name_list('X_1-X_3')})}"}
+        _, _, result = self.run_plan_with(plan, code)
+
+        self.assertEqual(["X_1", "X_2", "X_3"], result["datasets"]["WORK.N"]["n"].tolist())
+
+    def run_plan_with(self, plan, code):
+        translator = FakeTranslator(code)
+        runner = StepRunner(translator, approve)
+        return runner, translator, run_step_plan(plan, runner)
 
 
 class RealManifestTests(unittest.TestCase):
@@ -191,6 +243,9 @@ class PromptTests(unittest.TestCase):
         self.assertIn("sas_procs.fastclus", system)
         self.assertIn("sas_procs.univariate_percentiles", system)
         self.assertIn("new_macro_vars", system)
+        self.assertIn("ignore case", system)
+        self.assertIn("COL1", system)
+        self.assertIn("HAI_1-HAI_6", system)
         self.assertIn("WORK.A", user)
         self.assertIn("WORK.B", user)
         self.assertIn('"year": "2025"', user)
@@ -205,6 +260,7 @@ class PromptTests(unittest.TestCase):
         self.assertIn("named double", calls[0]["contents"])
         self.assertIn("%macro double", calls[0]["contents"])
         self.assertIn("sas_procs.fastclus", calls[0]["config"].system_instruction)
+        self.assertIn("never pass a dataset name", calls[0]["config"].system_instruction)
 
 
 if __name__ == "__main__":
