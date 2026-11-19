@@ -16,7 +16,7 @@ The feedback was of three kinds:
 
 Twice a new answer undid an earlier fix (the `weight_` columns, and the key spelling in `nation_avg_peer`). The last rounds sent the previous working code and asked for one change, as the Program 1 repair loop does.
 
-About half of the rounds came from case: SAS ignores it, pandas does not, and the runner's case-insensitive lookup covers `df['X']` but not lists of columns, `sort_values` or `merge` (see `docs/validation_report.md`).
+About half of the rounds came from case: SAS ignores it, pandas does not, and at the time the runner's case-insensitive lookup covered only `df['X']`. Lists of columns, `sort_values`, `drop`, `groupby` and `merge` were added afterwards (#93, `docs/step_runner.md`).
 
 Gemini's output changes between runs. These files are one run that works, not a promise that the next run will.
 

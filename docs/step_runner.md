@@ -81,10 +81,11 @@ Ten generate, read, run passes on `gemini-3.5-flash-lite`:
 
 - Most failures were ordinary, not wrong SAS logic: a column under another case, a name list expanded wrongly, a table with the wrong shape, a function that does not exist.
 - **Gemini's output changes between runs.** Passes 7 to 9 each got 2 of 3 Program 0 outputs right, a different pair each time. Pass 10 got all 3. That run is saved as a test fixture (`tests/fixtures/program0_generated/`) and `tests/test_program0_generated_fixture.py` checks it with no Gemini call.
-- Making it stable needs run-time errors and validator differences fed back to Gemini (#66).
+- **Program 2 took 11 rounds.** The first run ran 6 of 31 steps. Hao asked for the failed steps again by hand, with the error, the validation result and notes from reading the SAS code, until both outputs matched SAS. That run is saved as a test fixture (`tests/fixtures/program2_generated/`, `tests/test_program2_generated_fixture.py`, PR #95). About half of the rounds were column-case errors, which `SasFrame` now covers for lists, `sort_values`, `drop`, `groupby` and `merge` (#93).
+- Making it stable needs run-time errors and validator differences fed back to Gemini automatically (#66).
 
 ## Not done yet
 
-- **Program 2** on generated code (#33). `run_program 2` already starts it from the SAS outputs of Programs 0 and 1 and the measure lists and counts in `config/measure_groups.json` (`program2_inputs`, #72).
+- **Program 2 from AI outputs.** `run_program 2` starts from the SAS outputs of Programs 0 and 1 and the measure lists and counts in `config/measure_groups.json` (`program2_inputs`, #72). Running it on the generated outputs of the earlier programs is part of the chain.
 - **Repair and history for steps** (#66).
 - **Program 0, 1 and 2 chained on generated code** (#32).

@@ -234,7 +234,7 @@ The loop for Programs 0 and 2 (#66) should repair run-time errors too. Hao and M
 | The code is not approved in review | Stop. |
 | The attempt limit is reached | Stop with the last result. Same limit as Program 1. |
 
-Some run-time errors come from the runner, not the generated code, and asking Gemini again does not fix them reliably. Fix those in `src/step_runner.py` instead. For example, a column lookup that ignores case works for `df['X']` but not yet for a list of columns (`df[['A', 'B']]`) or `sort_values(by=...)`. Miguel is fixing that in #93.
+Some run-time errors come from the runner, not the generated code, and asking Gemini again does not fix them reliably. Fix those in `src/step_runner.py` instead. For example, a column lookup that ignores case now covers `df['X']`, lists of columns, `sort_values(by=)`, `drop`, `groupby`, `dropna`, `drop_duplicates` and `merge` (#93). It does not cover `df.groupby('g')['V']` or `pd.merge(a, b, on=)`, so a failure there should be fixed in the runner too.
 
 ## Limits
 
