@@ -1,0 +1,1 @@
+out_df = grp_score(input_df, measures)
