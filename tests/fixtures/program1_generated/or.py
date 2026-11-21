@@ -1,0 +1,2 @@
+measures = ['std_EDAC_30_AMI', 'std_EDAC_30_HF', 'std_EDAC_30_PN', 'std_OP_32', 'std_READM_30_CABG', 'std_READM_30_COPD', 'std_READM_30_HIP_KNEE', 'std_READM_30_HOSP_WIDE', 'std_OP_35_ADM', 'std_OP_35_ED', 'std_OP_36']
+out_df = grp_score(input_df, measures)
