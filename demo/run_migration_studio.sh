@@ -14,7 +14,7 @@ if [[ ! -d "output/chain_runs" ]]; then
 fi
 PYTHON_BIN="${PYTHON_BIN:-$HOME/sas-migration/.venv/bin/python}"
 if [[ ! -x "$PYTHON_BIN" ]]; then PYTHON_BIN=python3; fi
-exec "$PYTHON_BIN" -m streamlit run demo/migration_studio_final_v11_2.py \
+exec "$PYTHON_BIN" -m streamlit run demo/migration_studio.py \
   --server.port=8519 \
   --theme.base=light \
   --theme.primaryColor='#245FCF' \
