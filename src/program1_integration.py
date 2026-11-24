@@ -21,7 +21,7 @@ from src.orchestrate import (
 )
 from src.validate import compare_detailed
 from src.pipeline_retry import retry_call
-from src.translation_history import CandidateHistory, HistoryStorageError, error_details
+from src.translation_history import CandidateHistory, HistoryStorageError, code_hash, error_details
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,8 +45,8 @@ def run_program1_with_feedback(
     Invalid configuration and an existing run directory still raise before work.
     Review is synchronous; a REVIEW_REQUIRED run cannot be resumed here.
     """
-    if type(max_attempts) is not int or max_attempts < 1:
-        raise ValueError("max_attempts must be a positive integer.")
+    if type(max_attempts) is not int or not 1 <= max_attempts <= 3:
+        raise ValueError("max_attempts must be an integer between 1 and 3.")
     if not callable(review_code):
         raise TypeError("review_code must be callable.")
     plan = build_program1_plan(manifest_path, config_path)
@@ -57,11 +57,15 @@ def run_program1_with_feedback(
     previous_code = None
     repair_steps = None
     feedback = None
+    loop_id = None
 
     def report(status, code_dir, error=None):
         # Keep the latest completed validation details separate from a failed
         # candidate, which has not necessarily reached execution or validation.
         latest = history[-1] if history else {"steps": [], "outputs": {}}
+        if attempt_history is not None:
+            attempt_history.record({"type": "feedback_status", "attempt": attempt,
+                                    "status": status, "error": error})
         return {
             **latest,
             "status": status,
@@ -73,6 +77,7 @@ def run_program1_with_feedback(
         }
 
     for attempt in range(1, max_attempts + 1):
+        attempt_history = None
         attempt_dir = run_dir / f"attempt_{attempt}"
         code_dir = attempt_dir / "code"
         stage = "generation" if attempt == 1 else "repair"
@@ -81,36 +86,76 @@ def run_program1_with_feedback(
         def request_repair():
             nonlocal repair_requests
             repair_requests += 1
-            return translator.repair_program1(repair_steps, previous_code, feedback)
+            try:
+                return translator.repair_program1(repair_steps, previous_code, feedback)
+            except Exception as error:
+                try:
+                    attempt_history.record({"type": "request_error", "repair_request_id": request_id,
+                                            "request_number": repair_requests, "error": error_details(error)})
+                except Exception as storage_error:
+                    raise HistoryStorageError(str(storage_error)) from storage_error
+                raise
 
         try:
             if attempt == 1:
                 files = generate_program1_code(
                     translator, code_dir, manifest_path, config_path,
+                    feedback_attempt=True,
                 )
+                attempt_history = CandidateHistory(code_dir)
+                loop_id = attempt_history.run_id
             else:
+                previous = CandidateHistory(run_dir / f"attempt_{attempt - 1}" / "code")
+                previous_ids = {key: value["candidate_id"] for key, value in previous.pointer["candidates"].items()}
+                code_dir.mkdir(parents=True)
+                attempt_history = CandidateHistory(code_dir, metadata={
+                    "program": 1, "loop_id": loop_id, "previous_run_id": previous.run_id,
+                    "attempt": attempt, "repair_history": True,
+                })
+                request_id = attempt_history.record({
+                    "type": "repair_request", "step_ids": [step["id"] for step in repair_steps],
+                    "previous_candidates": previous_ids, "feedback": feedback,
+                })
                 repaired, _ = retry_call(
                     request_repair,
                     max_attempts=3, delay_seconds=2.0,
                 )
                 expected = {step["id"] for step in repair_steps}
+                for step in repair_steps:
+                    code = repaired.get(step["id"]) if isinstance(repaired, dict) else None
+                    if isinstance(code, str):
+                        attempt_history.candidate(step, code, origin="repair",
+                                                  previous_candidate_id=previous_ids[step["id"]],
+                                                  repair_request_id=request_id)
                 if (not isinstance(repaired, dict) or set(repaired) != expected
                         or any(not isinstance(code, str) or not code.strip()
                                for code in repaired.values())):
-                    raise ValueError("Repair must return non-empty code for each requested step.")
-                code_dir.mkdir(parents=True)
+                    error = ValueError("Repair must return non-empty code for each requested step.")
+                    attempt_history.record({"type": "generation_error", "repair_request_id": request_id,
+                                            "step_ids": sorted(expected), "error": error_details(error)})
+                    raise error
                 files = {}
-                for step_id, code in {**previous_code, **repaired}.items():
+                for step in plan:
+                    step_id = step["id"]
+                    if step_id not in previous_code:
+                        continue
+                    code = repaired.get(step_id, previous_code[step_id])
+                    if step_id not in repaired:
+                        attempt_history.candidate(step, code, origin="carried_forward",
+                                                  previous_candidate_id=previous_ids[step_id])
                     path = code_dir / f"{step_id}.py"
                     path.write_bytes(code.encode("utf-8"))
                     files[step_id] = path
 
             stage = "review"
+            approved_hashes = {step_id: code_hash(path.read_bytes().decode("utf-8"))
+                               for step_id, path in files.items()}
             if review_code(dict(files)) is not True:
                 return report("REVIEW_REQUIRED", code_dir)
 
             stage = "execution"
             result = run_reviewed_program1(
+                approved_hashes=approved_hashes,
                 code_dir=code_dir, input_csv=input_csv,
                 output_dir=attempt_dir / "data", manifest_path=manifest_path,
                 config_path=config_path, sas_output_dir=sas_output_dir,
@@ -162,6 +207,7 @@ def generate_program1_code(
     max_attempts=3,
     retry_delay_seconds=2.0,
     history_store=None,
+    feedback_attempt=False,
 ):
     """Generate and save code without executing it."""
     plan = build_program1_plan(manifest_path, config_path)
@@ -174,7 +220,9 @@ def generate_program1_code(
         )
 
     code_dir.mkdir(parents=True, exist_ok=True)
-    metadata = {"manifest_path": str(manifest_path), "config_path": str(config_path)}
+    metadata = {"program": 1, "manifest_path": str(manifest_path), "config_path": str(config_path)}
+    if feedback_attempt:
+        metadata.update(attempt=1, repair_history=True)
     model = getattr(translator, "model_name", None)
     if isinstance(model, str):
         metadata["model_name"] = model
@@ -248,6 +296,7 @@ def run_reviewed_program1(
     config_path=DEFAULT_GROUP_CONFIG,
     sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
     on_error="raise",
+    approved_hashes=None,
     *,
     history_store=None, validator=None,
 ):
@@ -277,14 +326,19 @@ def run_reviewed_program1(
         "manifest_path": str(manifest_path), "config_path": str(config_path),
     })
     execution_id = uuid4().hex
-    code_snapshot = {}
+    code_snapshot = {
+        step["id"]: (code_dir / f"{step['id']}.py").read_bytes().decode("utf-8")
+        for step in plan if step["action"] == "translate"
+    }
+    if approved_hashes is not None and approved_hashes != {
+        key: code_hash(code) for key, code in code_snapshot.items()
+    }:
+        raise ValueError("Program 1 files changed after review began. Review the new candidates before execution.")
     candidates = {}
     for step in plan:
         if step["action"] == "translate":
-            code = (code_dir / f"{step['id']}.py").read_bytes().decode("utf-8")
-            code_snapshot[step["id"]] = code
             candidates[step["id"]] = history.candidate(
-                step, code, origin="reviewed_file", reuse=True,
+                step, code_snapshot[step["id"]], origin="reviewed_file", reuse=True,
             )
     history.record({
         "type": "execution_started", "execution_id": execution_id,

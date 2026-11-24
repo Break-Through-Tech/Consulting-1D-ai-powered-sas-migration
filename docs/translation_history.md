@@ -142,7 +142,9 @@ Records are append-only, with `schema_version=1` and UTC `recorded_at` timestamp
 Each record is written to a temporary directory, then renamed into place.
 Readers ignore unfinished temporary directories. Pointer files are replaced
 through temporary files. Reads verify code hashes and raise on corrupt records.
-Timestamps reflect when each record was saved.
+New local records include a per-run append sequence so tied timestamps retain
+write order across processes. Older records retain their original timestamp
+ordering. The order of older records with identical timestamps is unknown.
 
 - After interrupted generation, inspect partial files and history, then generate
   into a new code directory. There is no automatic resume.
@@ -199,37 +201,38 @@ Regression coverage lives in:
 - `tests/test_translator_guards.py`: legacy outcomes without claims of review or
   validation.
 
-### Branch scope and related work
+### Program 1 repair provenance
 
-[Issue #41 / PR #54](https://github.com/Break-Through-Tech/Consulting-1D-ai-powered-sas-migration/pull/54)
-is included after integrating `main`. The optional
-`run_program1_with_feedback()` wrapper and `GeminiSASTranslator.repair_program1()`
-are available; see the [feedback-loop instructions](program1_integration.md#optional-validation-feedback-loop).
-The examples earlier in this guide still describe separate generation and
-reviewed execution.
+The [Program 1 feedback loop](program1_integration.md#optional-validation-feedback-loop)
+keeps each attempt's history in its own code directory. A repair attempt's
+`loop_id` identifies the initial run and `previous_run_id` identifies its parent.
+One `repair_request` contains the targets, validator feedback and previous
+candidate IDs. Each replacement links to its request and predecessor, even
+when the new code is identical. Unrequested steps use `origin="carried_forward"`
+and link to the previous candidate. Transport errors refer to the same request.
+The feedback loop verifies the reviewed source hashes against the in-memory
+execution snapshot. A changed file stops the attempt before execution.
+`read_program1_attempts(run_dir)` reads the complete chain without measurement
+metadata and rejects missing attempts or broken predecessor links.
 
-The automatically combined code provides partial history for the feedback loop:
+### Program 0 and 2 histories
 
-- Initial generation saves candidates before review through
-  `generate_program1_code()`.
-- Each reviewed attempt saves outcomes through `run_reviewed_program1()`, in
-  that attempt's code directory. Repaired files enter history as reviewed-file
-  imports, with no generation/model metadata or links to earlier loop candidates.
-- Repair API requests, declined repair reviews, and wrapper-level failures are
-  not recorded in a persistent loop report. The wrapper's returned `attempts`
-  and final status remain in memory.
-- The wrapper does not accept `history_store`, provide a persistent loop ID
-  linking attempt runs. Repaired files are written as exact UTF-8 bytes and
-  repair requests use the code that actually ran, but the history guarantees
-  above apply only to the lower-level generation and reviewed-execution
-  functions.
+`generate_steps` saves returned code before syntax checking. A syntax or runtime
+fix creates one `repair_request` with `step_ids` and feedback. Each returned
+replacement links to its request and, when one exists, its previous candidate.
+Both `run_steps_report` and the fail-fast `run_saved_steps` record execution IDs,
+candidate IDs and observed outcomes when the code directory has a history pointer.
+Plain fixture replays need no pointer.
+The run command writes `run_finished` with the step statuses and the SAS checks
+for the selected program. Step `ok` means the step executed successfully.
 
-Complete feedback-loop persistence remains deferred. It would require recording
-repairs before review, preserving candidate lineage and unchanged dependencies,
-and saving review/error/final statuses under a common loop ID. The loop does not
-support resumption.
+Before replacing a working file, the pointer records the approved candidate
+as pending. On reopening the history, matching working bytes recover that
+candidate's ID. A mismatch stops execution and leaves both versions available
+for inspection.
 
-History supports evaluation (#43) and stores the validation details returned by
-`src/validate.py` (#39). Main's exact-reference/tolerance updates (#40) and
-Programs 0/2 orchestration (#49, closed) are included, but persistent history still covers
-Program 1 only. Token/cost tracking remains outside this feature.
+For #43, read the run identified in `translation_history.json`. Count
+`repair_request` targets per step for fix attempts. Use the initial generated
+candidate's first executed outcome for first-try success. A syntax rejection
+is a failed candidate. A blocked outcome provides no execution result. Replaying
+an unchanged candidate or retrying a transport error adds no fix attempt.

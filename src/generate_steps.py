@@ -36,7 +36,8 @@ def main(argv=None, translator=None):
         from src.translator import GeminiSASTranslator
         translator = GeminiSASTranslator()
 
-    files = generate_step_code(translator, plan, code_dir, min_interval_seconds=args.min_interval)
+    files = generate_step_code(translator, plan, code_dir, min_interval_seconds=args.min_interval,
+                               program=int(args.program))
     print(f"Saved code for {len(files)} steps in {code_dir}")
     print("Read it before running it. It runs with full access to this computer.")
     return 0

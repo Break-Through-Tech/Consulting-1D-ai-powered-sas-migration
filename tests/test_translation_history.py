@@ -37,6 +37,16 @@ class LocalHistoryTests(unittest.TestCase):
         self.assertEqual(len(self.store.read_run(first)), 3)
         self.assertEqual(len(self.store.read_run(second)), 1)
 
+    def test_same_tick_order_survives_reopening_the_store(self):
+        with patch("src.translation_history.datetime") as clock:
+            clock.now.return_value.isoformat.return_value = "2026-01-01T00:00:00+00:00"
+            run = self.store.create_run({})
+            for index in range(12):
+                LocalJSONHistoryStore(self.root).append(run, {"type": "event", "index": index})
+        records = self.store.read_run(run)
+        self.assertEqual([r["sequence"] for r in records], list(range(13)))
+        self.assertEqual([r["index"] for r in records[1:]], list(range(12)))
+
     def test_validation_values_use_strict_json_without_stringifying_numbers(self):
         run = self.store.create_run({})
         self.store.append(run, {"type": "outcome", "validation": {

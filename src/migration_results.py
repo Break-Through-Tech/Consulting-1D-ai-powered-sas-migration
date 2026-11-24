@@ -36,13 +36,20 @@ def _status(record):
     return (record.get("result", {}).get("status") or record.get("status") or "").lower()
 
 
+def _precedes(first, second):
+    if "sequence" in first and "sequence" in second:
+        return first["sequence"] < second["sequence"]
+    return bool(first.get("recorded_at") and second.get("recorded_at")
+                and first["recorded_at"] < second["recorded_at"])
+
+
 def _first_try(candidate, outcomes, invalid_candidates):
     if candidate is None or candidate["origin"] != "generated":
         return None
     if candidate["record_id"] in invalid_candidates:
         return False
     first_try = None
-    first_at = None
+    first_outcome = None
     for outcome in outcomes:
         status = _status(outcome)
         kind = outcome.get("result", {}).get("kind", candidate.get("step", {}).get("kind"))
@@ -54,10 +61,9 @@ def _first_try(candidate, outcomes, invalid_candidates):
         else:
             continue
 
-        recorded_at = outcome.get("recorded_at")
         if first_try is None:
-            first_try, first_at = passed, recorded_at
-        elif first_at is None or recorded_at != first_at:
+            first_try, first_outcome = passed, outcome
+        elif _precedes(first_outcome, outcome):
             break
         elif passed != first_try:
             # Random record IDs do not establish the order of tied outcomes.
@@ -115,18 +121,19 @@ def _output_summary(outputs):
     }
 
 
-def _program1_execution(records):
-    """Summarize one reviewed execution from its plan and linked outcomes."""
+def _execution_result(program, records):
+    """Only the latest identifiable execution can supply current validation."""
     starts = [
         record for record in records
         if record["type"] == "execution_started" and "execution_id" in record
     ]
     if not starts:
-        return {}
+        if any(r["type"] == "run" and r["metadata"].get("attempt") for r in records):
+            return {"status": "INCOMPLETE", "step_statuses": {}}
+        return next((r for r in reversed(records) if r["type"] == "run_finished"), {})
     execution = starts[-1]
-    started_at = execution.get("recorded_at")
-    if len(starts) > 1 and started_at is not None and starts[-2].get("recorded_at") == started_at:
-        return {"step_statuses": {}}
+    if len(starts) > 1 and not _precedes(starts[-2], execution):
+        return {"status": "INCOMPLETE", "step_statuses": {}}
 
     candidate_ids = execution["candidates"]
     outcomes = {
@@ -136,6 +143,13 @@ def _program1_execution(records):
         and record.get("execution_id") == execution["execution_id"]
         and candidate_ids.get(record["result"]["id"]) == record["candidate_id"]
     }
+    statuses = {step_id: outcome["status"].lower() for step_id, outcome in outcomes.items()}
+    if program != 1:
+        finished = next((r for r in reversed(records) if r["type"] == "run_finished"
+                         and r.get("execution_id") == execution["execution_id"]), None)
+        if finished and candidate_ids.keys() <= outcomes.keys():
+            return finished
+        return {"status": "INCOMPLETE", "step_statuses": statuses}
     outputs = {}
     for step in execution["execution_plan"]:
         if step["id"] not in candidate_ids or step["kind"] != "group":
@@ -159,19 +173,20 @@ def _program1_execution(records):
     return {
         "status": status,
         "outputs": outputs,
-        "step_statuses": {step_id: outcome["status"].lower() for step_id, outcome in outcomes.items()},
+        "step_statuses": statuses,
     }
 
 
-def history_result(program, records, measurement=None):
+def history_result(program, records, measurement=None, *, execution_records=None):
     """Summarize a history run without exporting code, feedback, or input rows."""
+    # Sequence numbers are local to one store; linked attempts arrive in loop order.
+    if execution_records is None and all("sequence" in r for r in records):
+        records = sorted(records, key=lambda r: r["sequence"])
     header = next(record for record in records if record["type"] == "run")
     metadata = header["metadata"]
     if metadata.get("program", program) != program:
         raise ValueError(f"History run {header['run_id']} does not belong to Program {program}.")
-    completed = next((record for record in reversed(records) if record["type"] == "run_finished"), {})
-    if program == 1 and not completed:
-        completed = _program1_execution(records)
+    completed = _execution_result(program, records if execution_records is None else execution_records)
     steps = _history_steps(
         records,
         complete_repair_history=metadata.get("repair_history") is True,
@@ -198,9 +213,43 @@ def history_result(program, records, measurement=None):
     }
 
 
+def _program1_history_result(folder, measurements, *, member_id=None):
+    """Join sequential attempt stores, retaining the initial run as the chart ID."""
+    from src.translation_history import read_program1_attempts
+
+    attempts = read_program1_attempts(folder)
+    if member_id is not None and not any(records[0]["run_id"] == member_id for records in attempts):
+        raise ValueError(f"History {member_id} is not part of the Program 1 feedback loop in {folder}")
+    combined = [record for attempt in attempts for record in attempt]
+    records = attempts[-1]
+    result = history_result(1, combined, measurements.get(combined[0]["run_id"]), execution_records=records)
+    # A validated attempt can still be followed by an unfinished review or repair.
+    terminal = records[-1]
+    if terminal["type"] != "feedback_status":
+        result["status"] = "INCOMPLETE"
+    elif terminal["status"] in {"PASS", "FAIL"}:
+        if result["status"] != terminal["status"]:
+            raise ValueError(f"Program 1 terminal status disagrees with execution history in {folder}")
+    else:
+        result["status"] = terminal["status"]
+    return result
+
+
+def _stored_result(program, store, run_id, measurements):
+    root = Path(store)
+    records = LocalJSONHistoryStore(root).read_run(run_id)
+    header = next(r for r in records if r["type"] == "run")
+    if program == 1 and header["metadata"].get("attempt"):
+        return _program1_history_result(root.parent.parent.parent, measurements, member_id=run_id)
+    return history_result(program, records, measurements.get(run_id))
+
+
 def measured_program1_result(folder, measurements):
     """Join the first attempt's generation history to this run's observed repairs."""
-    evidence = json.loads((folder / "measurement.json").read_text(encoding="utf-8"))
+    sidecar = folder / "measurement.json"
+    if not sidecar.exists():
+        return _program1_history_result(folder, measurements)
+    evidence = json.loads(sidecar.read_text(encoding="utf-8"))
     histories = evidence["histories"]
     if not histories or histories[0]["attempt"] != 1:
         raise ValueError(f"No initial Program 1 history in {folder}")
@@ -325,7 +374,7 @@ def build_results(runs):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--program1-run", type=Path, action="append", default=[],
-                        help="include a measured Program 1 feedback run (repeatable)")
+                        help="include a Program 1 feedback loop, with optional measurement.json (repeatable)")
     parser.add_argument("--output", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument(
         "--history", nargs=3, action="append", default=[], metavar=("PROGRAM", "STORE", "RUN_ID"),
@@ -347,7 +396,7 @@ def main(argv=None):
 
     measurements = json.loads(args.measurements.read_text(encoding="utf-8")) if args.measurements else {}
     runs = [
-        history_result(int(program), LocalJSONHistoryStore(store).read_run(run_id), measurements.get(run_id))
+        _stored_result(int(program), store, run_id, measurements)
         for program, store, run_id in args.history
     ]
     runs.extend(measured_program1_result(folder, measurements) for folder in args.program1_run)

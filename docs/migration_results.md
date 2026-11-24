@@ -77,6 +77,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Results export failed' }
 
 Omit `--replay-reviewed-fixtures` for a live-only export. The exporter also accepts `--history PROGRAM STORE RUN_ID` for an existing history store. Always specify `--output` when experimenting.
 
+For a Program 1 feedback directory with linked #66 histories, `--program1-run`
+also works without `measurement.json`. It counts repair targets across attempts
+and uses the original candidates for first-try outcomes. Unmeasured timing and
+cost remain null. Passing a linked attempt to `--history 1 STORE RUN_ID` reads
+the same whole loop using history alone. Keep the attempt directories together.
+An incomplete execution cannot inherit an earlier pass.
+
 **Optional diagnostics:** See `measurement.json` in the run directory for detailed timing, API usage, and repair records. Keep it alongside the saved attempts. Generated code and raw history remain local.
 
 ### 4. Evidence interpretation and limitations

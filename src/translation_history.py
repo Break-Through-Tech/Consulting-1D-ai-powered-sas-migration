@@ -52,6 +52,13 @@ class CandidateHistory:
                 for record in self.store.read_run(self.pointer["run_id"])
                 if record["type"] == "candidate"
             }
+            pending_id = self.pointer.get("pending_publication")
+            if pending_id is not None:
+                pending = self.known[pending_id]
+                path = Path(code_dir) / f"{pending['step_id']}.py"
+                if code_hash(path.read_bytes().decode("utf-8")) != pending["code_sha256"]:
+                    raise ValueError("Interrupted repair publication: working file does not match the approved candidate.")
+                self.select_candidate(pending_id)
         else:
             self.pointer = {
                 "schema_version": 1,
@@ -68,7 +75,8 @@ class CandidateHistory:
     def record(self, record):
         return self.store.append(self.run_id, record)
 
-    def candidate(self, step, code, *, origin, reuse=False):
+    def candidate(self, step, code, *, origin, reuse=False, previous_candidate_id=None,
+                  repair_request_id=None, select=True):
         previous = self.pointer["candidates"].get(step["id"])
         if previous:
             archived = self.known.get(previous["candidate_id"])
@@ -79,17 +87,33 @@ class CandidateHistory:
         record = {
             "type": "candidate", "step_id": step["id"], "step": step,
             "origin": origin,
-            "review_status": "pending" if origin == "generated" else "caller_supplied_reviewed_code",
+            "review_status": "caller_supplied_reviewed_code" if origin == "reviewed_file" else "pending",
         }
-        if previous:
-            record["previous_candidate_id"] = previous["candidate_id"]
+        if previous and previous_candidate_id is None:
+            previous_candidate_id = previous["candidate_id"]
+        if previous_candidate_id:
+            record["previous_candidate_id"] = previous_candidate_id
+        if repair_request_id:
+            record["repair_request_id"] = repair_request_id
         candidate_id = self.store.append(self.run_id, record, code=code)
         self.known[candidate_id] = {**record, "code_sha256": code_hash(code)}
-        self.pointer["candidates"][step["id"]] = {
-            "candidate_id": candidate_id, "code_sha256": code_hash(code),
-        }
-        write_json_atomic(self.pointer_path, self.pointer)
+        if select:
+            self.select_candidate(candidate_id)
         return candidate_id
+
+    def begin_publication(self, candidate_id):
+        """Persist the approved identity before changing the working file."""
+        self.pointer["pending_publication"] = candidate_id
+        write_json_atomic(self.pointer_path, self.pointer)
+
+    def select_candidate(self, candidate_id):
+        """Point the working file at a saved candidate after publishing its code."""
+        archived = self.known[candidate_id]
+        self.pointer["candidates"][archived["step_id"]] = {
+            "candidate_id": candidate_id, "code_sha256": archived["code_sha256"],
+        }
+        self.pointer.pop("pending_publication", None)
+        write_json_atomic(self.pointer_path, self.pointer)
 
 
 def code_hash(code):
@@ -161,6 +185,9 @@ class LocalJSONHistoryStore:
         record_id = uuid4().hex
         payload = {
             **record,
+            # One writer per run. Count published records, including legacy ones.
+            "sequence": sum(1 for child in directory.iterdir()
+                            if not child.name.startswith(".") and child.is_dir()),
             "schema_version": 1,
             "run_id": run_id,
             "record_id": record_id,
@@ -194,4 +221,46 @@ class LocalJSONHistoryStore:
                     raise ValueError(f"History code hash mismatch: {child}")
                 record["code"] = code
             records.append(record)
-        return sorted(records, key=lambda item: (item["recorded_at"], item["record_id"]))
+        # Legacy records keep their original timestamp order before sequenced appends.
+        return sorted(records, key=lambda item: (
+            item.get("sequence", -1), item["recorded_at"], item["record_id"],
+        ))
+
+
+def read_program1_attempts(folder):
+    """Read a feedback loop in attempt order, verifying its run and candidate links."""
+    folder = Path(folder)
+    numbers = sorted(int(p.name[8:]) for p in folder.glob("attempt_*")
+                     if p.is_dir() and p.name[8:].isdigit())
+    if not numbers or numbers != list(range(1, len(numbers) + 1)):
+        raise ValueError(f"Missing Program 1 attempt in {folder}")
+    attempts = []
+    loop_id = previous_id = None
+    previous_candidates = {}
+    for number in numbers:
+        code_dir = folder / f"attempt_{number}" / "code"
+        pointer = code_dir / "translation_history.json"
+        if not pointer.is_file():
+            raise ValueError(f"Incomplete attempt: missing history pointer in {code_dir}")
+        run_id = json.loads(pointer.read_text(encoding="utf-8"))["run_id"]
+        records = LocalJSONHistoryStore(code_dir / ".translation_history").read_run(run_id)
+        header = next(r for r in records if r["type"] == "run")
+        metadata = header["metadata"]
+        if (header["run_id"] != run_id or metadata.get("program") != 1
+                or metadata.get("attempt") != number or metadata.get("repair_history") is not True):
+            raise ValueError(f"Invalid Program 1 attempt metadata in {code_dir}")
+        if number == 1:
+            loop_id = run_id
+        elif metadata.get("loop_id") != loop_id or metadata.get("previous_run_id") != previous_id:
+            raise ValueError(f"Unlinked Program 1 history in {code_dir}")
+        candidates = {}
+        for record in records:
+            if record["type"] == "candidate":
+                parent = record.get("previous_candidate_id")
+                if parent or record["origin"] in {"repair", "carried_forward"}:
+                    if candidates.get(parent, previous_candidates.get(parent)) != record["step_id"]:
+                        raise ValueError(f"Unknown candidate predecessor in {code_dir}")
+                candidates[record["record_id"]] = record["step_id"]
+        attempts.append(records)
+        previous_id, previous_candidates = run_id, candidates
+    return attempts

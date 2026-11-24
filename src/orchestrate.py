@@ -628,6 +628,8 @@ def run_step_plan(
     execute_step,
     initial_macro_vars=None,
     initial_datasets=None,
+    *,
+    on_step_complete=None,
 ):
     """Run a general step plan using a caller-provided callback.
 
@@ -802,6 +804,8 @@ def run_step_plan(
         macro_vars.update(updated_macros)
         datasets.update(updated_datasets)
         completed.add(step_id)
+        if on_step_complete is not None:
+            on_step_complete(step)
 
     return {
         "macro_vars": macro_vars,

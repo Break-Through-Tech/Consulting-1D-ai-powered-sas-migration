@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from src.migration_results import build_results, history_result
+from src.migration_results import build_results, history_result, main
 from src.program1_integration import generate_program1_code, run_reviewed_program1
 from src.translation_history import LocalJSONHistoryStore
 
@@ -20,6 +20,68 @@ class FixtureTranslator:
 
 
 class MigrationResultsTests(unittest.TestCase):
+    def test_interrupted_replay_does_not_inherit_a_finished_pass(self):
+        records = [
+            {"type": "run", "run_id": "r", "metadata": {"program": 0, "repair_history": True}},
+            {"type": "candidate", "record_id": "c", "step_id": "s", "origin": "generated"},
+            {"type": "execution_started", "execution_id": "one", "candidates": {"s": "c"}},
+            {"type": "outcome", "execution_id": "one", "candidate_id": "c", "result": {"id": "s", "status": "ok"}},
+            {"type": "run_finished", "execution_id": "one", "status": "PASS", "step_statuses": {"s": "ok"}},
+            {"type": "execution_started", "execution_id": "two", "candidates": {"s": "c"}},
+            {"type": "outcome", "execution_id": "two", "candidate_id": "c", "result": {"id": "s", "status": "failed"}},
+            {"type": "repair_request", "step_ids": ["s"]},
+        ]
+        for i, record in enumerate(records):
+            record.update(sequence=i, recorded_at="same")
+        run = history_result(0, records)
+        self.assertEqual(run["status"], "INCOMPLETE")
+        self.assertEqual(run["steps"], [{"id": "s", "first_try_success": True, "status": "failed", "fix_attempts": 1}])
+        self.assertEqual(run["outputs"], {})
+        self.assertEqual(history_result(0, list(reversed(records))), run)
+        for record in records:
+            del record["sequence"]
+        legacy = history_result(0, records)
+        self.assertIsNone(legacy["steps"][0]["first_try_success"])
+        self.assertNotEqual(legacy["status"], "PASS")
+
+    def test_program1_linked_attempt_directories_export_without_measurement(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            previous_id = previous_candidate = None
+            for n, status in enumerate(("FAIL", "PASS"), 1):
+                code_dir = root / f"attempt_{n}" / "code"
+                store = LocalJSONHistoryStore(code_dir / ".translation_history")
+                metadata = {"program": 1, "attempt": n, "repair_history": True}
+                if n == 2:
+                    metadata.update(loop_id=previous_id, previous_run_id=previous_id)
+                run_id = store.create_run(metadata)
+                candidate = {"type": "candidate", "step_id": "s", "origin": "generated"}
+                if n == 2:
+                    store.append(run_id, {"type": "repair_request", "step_ids": ["s"]})
+                    candidate.update(origin="repair", previous_candidate_id=previous_candidate)
+                candidate_id = store.append(run_id, candidate, code="pass")
+                step = {"id": "s", "kind": "group", "group_config": {"output_table": "OUTCOME_SAFETY"}}
+                store.append(run_id, {"type": "execution_started", "execution_id": str(n),
+                                      "execution_plan": [step], "candidates": {"s": candidate_id}})
+                store.append(run_id, {"type": "outcome", "execution_id": str(n), "candidate_id": candidate_id,
+                                      "result": {"id": "s", "kind": "group", "status": status}})
+                (code_dir / "translation_history.json").write_text(json.dumps({"run_id": run_id}))
+                previous_id, previous_candidate = run_id, candidate_id
+            store.append(run_id, {"type": "feedback_status", "attempt": 2, "status": "PASS"})
+            output = root / "result.json"
+            main(["--program1-run", str(root), "--output", str(output)])
+            result, = json.loads(output.read_text())["runs"]
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["steps"], [{"id": "s", "first_try_success": False, "status": "pass", "fix_attempts": 1}])
+            self.assertEqual(result["outputs"]["OUTCOME_SAFETY"]["status"], "PASS")
+            self.assertIsNone(result["elapsed_seconds"])
+            main(["--history", "1", str(code_dir / ".translation_history"), run_id, "--output", str(output)])
+            self.assertEqual(json.loads(output.read_text())["runs"], [result])
+            # An interrupted next attempt cannot reuse the previous terminal status.
+            (root / "attempt_3").mkdir()
+            with self.assertRaises(ValueError):
+                main(["--program1-run", str(root), "--output", str(output)])
+
     def test_history_preserves_unknown_first_tries_and_counts_repairs(self):
         records = [
             {"type": "run", "run_id": "run", "metadata": {"program": 0, "repair_history": True}},
