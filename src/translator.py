@@ -170,16 +170,20 @@ class TranslationOutput(BaseModel):
 # 2. Gemini Translation Client
 # ---------------------------------------------------------------------------
 class GeminiSASTranslator:
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, *, http_options: Optional[types.HttpOptions] = None):
         # Uses GEMINI_API_KEY from the environment or .env if api_key is None.
         # A key that is already exported wins over .env.
         load_dotenv(ROOT / ".env")
-        self.client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY"))
+        options = {} if http_options is None else {"http_options": http_options}
+        self.client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY"), **options)
         self.model_name = "gemini-3.5-flash-lite"
+
+    def _program1_generate_content(self, **request):
+        return self.client.models.generate_content(**request)
 
     def repair_program1(self, steps, previous_code, feedback):
         """Repair the shared macro and failed groups using validator diagnostics."""
-        response = self.client.models.generate_content(
+        response = self._program1_generate_content(
             model=self.model_name,
             contents=json.dumps({
                 "steps": steps,
@@ -238,7 +242,7 @@ class GeminiSASTranslator:
             Implementation Notes from Manifest:
             {step_info.get('notes')}"""
 
-        response = self.client.models.generate_content(
+        response = self._program1_generate_content(
             model=self.model_name,
             contents=user_prompt,
             config=types.GenerateContentConfig(
@@ -269,7 +273,7 @@ class GeminiSASTranslator:
             {step_info.get('sas_code')}
             Generate Python code assigning the output to out_df.
             """
-        response = self.client.models.generate_content(
+        response = self._program1_generate_content(
             model=self.model_name,
             contents=user_prompt,
             config=types.GenerateContentConfig(
