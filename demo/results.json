@@ -1,0 +1,780 @@
+{
+  "schema_version": 1,
+  "runs": [
+    {
+      "id": "db1be915acf34d03b990daac6f6898ae",
+      "source": "translation_history",
+      "programs": [
+        1
+      ],
+      "implementation": "gemini",
+      "configuration": {
+        "model_name": "gemini-3.5-flash-lite",
+        "prompt_version": "e87aac17dd3e353ee589f5457b8258dbcdd65649bcbdf8c12e4b06bfd32a363e",
+        "column_context": null,
+        "repair_loop": true,
+        "fastclus_helper": null
+      },
+      "status": "PASS",
+      "elapsed_seconds": 9.456007000000682,
+      "time_scope": "generation_execution_and_validation_excluding_review",
+      "cost_usd": null,
+      "steps": [
+        {
+          "id": "grp_score_macro",
+          "status": "complete",
+          "first_try_success": true,
+          "fix_attempts": 0
+        },
+        {
+          "id": "om",
+          "status": "pass",
+          "first_try_success": true,
+          "fix_attempts": 0
+        },
+        {
+          "id": "or",
+          "status": "pass",
+          "first_try_success": true,
+          "fix_attempts": 0
+        },
+        {
+          "id": "os",
+          "status": "pass",
+          "first_try_success": true,
+          "fix_attempts": 0
+        },
+        {
+          "id": "process",
+          "status": "pass",
+          "first_try_success": true,
+          "fix_attempts": 0
+        },
+        {
+          "id": "ptexp",
+          "status": "pass",
+          "first_try_success": true,
+          "fix_attempts": 0
+        }
+      ],
+      "first_try_passed": 6,
+      "first_try_measured": 6,
+      "first_try_success_rate": 1.0,
+      "outputs": {
+        "OUTCOME_MORTALITY": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 2.6645352591003757e-15
+        },
+        "OUTCOME_SAFETY": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 1.0658141036401503e-14
+        },
+        "OUTCOME_READMISSION": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 8.881784197001252e-15
+        },
+        "PTEXP": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 2.6645352591003757e-15
+        },
+        "PROCESS": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 1.0658141036401503e-14
+        }
+      }
+    },
+    {
+      "id": "reviewed-gemini-chain",
+      "source": "reviewed_fixture",
+      "programs": [
+        0,
+        1,
+        2
+      ],
+      "implementation": "gemini",
+      "configuration": {
+        "model_name": null,
+        "prompt_version": null,
+        "column_context": null,
+        "repair_loop": null,
+        "fastclus_helper": null
+      },
+      "status": "PASS",
+      "elapsed_seconds": 1.671,
+      "time_scope": "local_execution_and_validation",
+      "cost_usd": 0,
+      "steps": [
+        {
+          "program": 0,
+          "id": "keep_hos_macro",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "context_15",
+          "status": "skipped",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_all_data_2025jul",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_tabulate_work_measure_volume0",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_transpose_work_measure_volume_t0",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_include_measure0",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_include_measure0",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_include_measure0_2",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_tabulate_work_measure_volume",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_transpose_work_measure_volume_t",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_less100_measure",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_less100_measure",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_less100_measure",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_less100_measure_2",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_initial_data_2025jul",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_include_measure",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_include_measure",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_include_measure_2",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_include_measure_3",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_outcomes_mortality",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_outcomes_mortality",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_outcomes_safety",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_outcomes_safety",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_outcomes_readmission",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_outcomes_readmission",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_ptexp",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_ptexp",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_process",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_sql_work_process",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "call_keep_hos",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_means_measure_average_stddev_2025jul",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "proc_standard_work_std_data_2025jul",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_work_std_data_2025jul",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 0,
+          "id": "data_std_data_2025jul_analysis",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 1,
+          "id": "ctx_libs",
+          "status": "skipped",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 1,
+          "id": "grp_score_macro",
+          "status": "complete",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 1,
+          "id": "om",
+          "status": "pass",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 1,
+          "id": "os",
+          "status": "pass",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 1,
+          "id": "or",
+          "status": "pass",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 1,
+          "id": "ptexp",
+          "status": "pass",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 1,
+          "id": "process",
+          "status": "pass",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "report_macro",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "kmeans_macro",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "nation_avg0_macro",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "nation_avg_peer_macro",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "nation_avg_macro",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_all",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_summary_score",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_report",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "proc_sort_work_summary_score1",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "proc_sort_work_report_indicator",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_summary_score21",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_summary_score22",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_cnt_s10",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_kmeans",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_cnt_s20",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_kmeans_2",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_cnt_s30",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_kmeans_3",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_work_cnt_s_str",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "proc_sort_work_cnt_s_str",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_star_2025jul",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_star_2025jul_2",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_nation_avg0",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_nation_avg_peer",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_nation_avg",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_nation_avg_2",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_nation_avg_3",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_nation_avg_4",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "call_nation_avg_5",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_national_average_2025jul",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        },
+        {
+          "program": 2,
+          "id": "data_national_average_2025jul_2",
+          "status": "ok",
+          "first_try_success": null,
+          "fix_attempts": null
+        }
+      ],
+      "first_try_passed": 0,
+      "first_try_measured": 0,
+      "first_try_success_rate": null,
+      "outputs": {
+        "LESS100_MEASURE": {
+          "program": 0,
+          "status": "PASS",
+          "largest_difference": null
+        },
+        "MEASURE_AVERAGE_STDDEV_2025JUL": {
+          "program": 0,
+          "status": "PASS",
+          "largest_difference": 1.1013412404281553e-13
+        },
+        "STD_DATA_2025JUL_ANALYSIS": {
+          "program": 0,
+          "status": "PASS",
+          "largest_difference": 1.5720758028692217e-13
+        },
+        "OUTCOME_MORTALITY": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 3.197442310920451e-14
+        },
+        "OUTCOME_SAFETY": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 3.9968028886505635e-14
+        },
+        "OUTCOME_READMISSION": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 1.8385293287792592e-13
+        },
+        "PTEXP": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 2.6645352591003757e-15
+        },
+        "PROCESS": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 2.7533531010703882e-14
+        },
+        "STAR_2025JUL": {
+          "program": 2,
+          "status": "PASS",
+          "largest_difference": 1.8385293287792592e-13
+        },
+        "NATIONAL_AVERAGE_2025JUL": {
+          "program": 2,
+          "status": "PASS",
+          "largest_difference": 1.6498738139580915e-14
+        }
+      },
+      "model_name_by_program": {
+        "0": "gemini-3.5-flash-lite",
+        "1": null,
+        "2": "gemini-3.5-flash-lite"
+      }
+    },
+    {
+      "id": "handwritten-chain",
+      "source": "handwritten_baseline",
+      "programs": [
+        0,
+        1,
+        2
+      ],
+      "implementation": "handwritten",
+      "configuration": {
+        "model_name": null,
+        "prompt_version": null,
+        "column_context": null,
+        "repair_loop": null,
+        "fastclus_helper": null
+      },
+      "status": "PASS",
+      "elapsed_seconds": 0.32,
+      "time_scope": "local_execution_and_validation",
+      "cost_usd": 0,
+      "steps": [],
+      "first_try_passed": 0,
+      "first_try_measured": 0,
+      "first_try_success_rate": null,
+      "outputs": {
+        "LESS100_MEASURE": {
+          "program": 0,
+          "status": "PASS",
+          "largest_difference": null
+        },
+        "MEASURE_AVERAGE_STDDEV_2025JUL": {
+          "program": 0,
+          "status": "PASS",
+          "largest_difference": 1.1013412404281553e-13
+        },
+        "STD_DATA_2025JUL_ANALYSIS": {
+          "program": 0,
+          "status": "PASS",
+          "largest_difference": 1.5720758028692217e-13
+        },
+        "OUTCOME_MORTALITY": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 3.219646771412954e-14
+        },
+        "OUTCOME_SAFETY": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 3.9968028886505635e-14
+        },
+        "OUTCOME_READMISSION": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 1.8385293287792592e-13
+        },
+        "PTEXP": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 2.6645352591003757e-15
+        },
+        "PROCESS": {
+          "program": 1,
+          "status": "PASS",
+          "largest_difference": 2.842170943040401e-14
+        },
+        "STAR_2025JUL": {
+          "program": 2,
+          "status": "PASS",
+          "largest_difference": 1.8385293287792592e-13
+        },
+        "NATIONAL_AVERAGE_2025JUL": {
+          "program": 2,
+          "status": "PASS",
+          "largest_difference": 1.6482908787862627e-14
+        }
+      }
+    }
+  ],
+  "historical_observations": [
+    {
+      "program": 0,
+      "source": "docs/step_runner.md",
+      "gemini_runs": 10,
+      "runs_passing_all_outputs": 1,
+      "outputs_per_run": 3
+    },
+    {
+      "program": 1,
+      "source": "README.md",
+      "gemini_runs": null,
+      "runs_passing_all_outputs": 5,
+      "outputs_per_run": 5
+    },
+    {
+      "program": 2,
+      "source": "tests/fixtures/program2_generated/README.md",
+      "manual_feedback_rounds": 11,
+      "steps_ok_on_initial_run": 6,
+      "total_steps": 31,
+      "outputs_passing_on_final_run": 2
+    }
+  ]
+}

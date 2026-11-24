@@ -33,7 +33,7 @@ def run_program1_with_feedback(
     translator, review_code, *, max_attempts=3,
     run_dir=ROOT / "output" / "program1_feedback",
     input_csv=None, manifest_path=DEFAULT_MANIFEST,
-    config_path=DEFAULT_GROUP_CONFIG, sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
+    config_path=DEFAULT_GROUP_CONFIG, sas_output_dir=DEFAULT_SAS_OUTPUT_DIR, validator=None,
 ):
     """Generate, review, execute and repair Program 1 within a bounded run.
 
@@ -114,7 +114,7 @@ def run_program1_with_feedback(
                 code_dir=code_dir, input_csv=input_csv,
                 output_dir=attempt_dir / "data", manifest_path=manifest_path,
                 config_path=config_path, sas_output_dir=sas_output_dir,
-                on_error="report",
+                on_error="report", validator=validator,
             )
             invalid_references = {
                 table for table, output in result["outputs"].items()
@@ -249,7 +249,7 @@ def run_reviewed_program1(
     sas_output_dir=DEFAULT_SAS_OUTPUT_DIR,
     on_error="raise",
     *,
-    history_store=None,
+    history_store=None, validator=None,
 ):
     """Execute previously reviewed code through the existing Orchestrator."""
     if on_error not in ("raise", "report"):
@@ -269,8 +269,9 @@ def run_reviewed_program1(
             if not path.is_file():
                 raise FileNotFoundError(f"Missing reviewed code: {path}")
 
-    input_df = pd.read_csv(input_csv, dtype={"PROVIDER_ID": "string"})
-    input_df["PROVIDER_ID"] = input_df["PROVIDER_ID"].str.zfill(6)
+    if validator is None:
+        input_df = pd.read_csv(input_csv, dtype={"PROVIDER_ID": "string"})
+        input_df["PROVIDER_ID"] = input_df["PROVIDER_ID"].str.zfill(6)
 
     history = CandidateHistory(code_dir, history_store, metadata={
         "manifest_path": str(manifest_path), "config_path": str(config_path),
@@ -327,6 +328,13 @@ def run_reviewed_program1(
                 ),
                 "result": result,
             })
+
+    if validator is not None:
+        result = validator(code_snapshot, plan, input_csv, manifest_path, config_path,
+                           sas_output_dir, output_dir)
+        for step_result in result["steps"]:
+            record_step(step_result)
+        return result
 
     def execute_step(step, generated_code, dependency_outputs):
         scope = {"pd": pd, "np": np, "List": List}

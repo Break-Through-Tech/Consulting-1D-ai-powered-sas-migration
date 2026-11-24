@@ -73,6 +73,7 @@ Run these from the main project folder.
 - `docs/program1_integration.md`: Program 1 generate, review, run, and the feedback loop.
 - `docs/step_runner.md`: Programs 0 and 2, the translator, and how to run them.
 - `docs/validation_report.md`: checking the 10 outputs against SAS.
+- `docs/migration_results.md`: how to regenerate the demo's benchmark JSON.
 - `docs/translation_history.md`: the saved record of translation attempts (Program 1).
 - `docs/workflow/program0.md`, `program1.md`, `program2.md`: what each SAS program does, step by step. Generated from the manifests: `python -m src.generate_docs`.
 
