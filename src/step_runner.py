@@ -27,7 +27,7 @@ import pandas as pd
 
 from src import sas_procs
 from src.orchestrate import run_step_plan
-from src.pipeline_retry import retry_call
+from src.pipeline_retry import RequestNotDispatched, retry_call
 from src.translation_history import CandidateHistory, HistoryStorageError, error_details
 
 
@@ -375,11 +375,12 @@ def _code_problem(code):
 
 
 def request_step_candidate(translator, step, signatures, history, *, feedback=None, execution_id=None,
-                           previous_candidate_id=None,
+                           previous_candidate_id=None, macro_candidates=None, check_request_budget=None,
                            max_attempts=3, retry_delay_seconds=2.0):
     """Record one candidate request. Transport retries do not create extra candidates."""
     step_id = step["id"]
     request_id = None
+    repair = {}
     if feedback is not None:
         prior = history.pointer["candidates"].get(step_id)
         if previous_candidate_id is None and prior:
@@ -390,6 +391,16 @@ def request_step_candidate(translator, step, signatures, history, *, feedback=No
         }
         if execution_id is not None:
             repair["execution_id"] = execution_id
+        if macro_candidates:
+            repair["macro_candidates"] = macro_candidates
+    if check_request_budget is not None:
+        try:
+            check_request_budget()
+        except RequestNotDispatched as error:
+            history.record({**repair, "type": "request_rejected", "step_id": step_id,
+                            "request_number": 1, "error": error_details(error)})
+            raise
+    if repair:
         request_id = history.record(repair)
     requests = 0
 
@@ -403,7 +414,8 @@ def request_step_candidate(translator, step, signatures, history, *, feedback=No
             return translator.translate_step(step, dict(step.get("macro_vars", {})), dict(signatures), **extra)
         except Exception as error:
             try:
-                history.record({"type": "request_error", "step_id": step_id,
+                kind = "request_rejected" if isinstance(error, RequestNotDispatched) else "request_error"
+                history.record({"type": kind, "step_id": step_id,
                                 "repair_request_id": request_id, "request_number": requests,
                                 "error": error_details(error)})
             except Exception as storage_error:
@@ -439,6 +451,7 @@ def generate_step_code(
     min_interval_seconds=0.0,
     max_syntax_attempts=3,
     program=None,
+    check_request_budget=None,
 ):
     """Translate every step of a plan and save <step id>.py files. Runs no generated code.
 
@@ -481,6 +494,7 @@ def generate_step_code(
             code, problem, _ = request_step_candidate(
                 translator, step, signatures, history, feedback=feedback,
                 max_attempts=max_attempts, retry_delay_seconds=retry_delay_seconds,
+                check_request_budget=check_request_budget,
             )
             if problem is None:
                 break

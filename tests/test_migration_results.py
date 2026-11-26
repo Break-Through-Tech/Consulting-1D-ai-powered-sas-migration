@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from src.migration_results import build_results, history_result, main
+from src.migration_results import build_results, history_result, main, repair_attempt_counts
 from src.program1_integration import generate_program1_code, run_reviewed_program1
 from src.translation_history import LocalJSONHistoryStore
 
@@ -20,6 +20,19 @@ class FixtureTranslator:
 
 
 class MigrationResultsTests(unittest.TestCase):
+    def test_legacy_cap_rejection_only_removes_a_repair_that_never_dispatched(self):
+        legacy_cap_error = {"type": "ValueError", "message": "Measurement stopped at the 50-request limit."}
+        records = [
+            {"type": "repair_request", "record_id": "before", "step_ids": ["never_dispatched"]},
+            {"type": "request_error", "repair_request_id": "before", "request_number": 1, "error": legacy_cap_error},
+            {"type": "repair_request", "record_id": "after", "step_ids": ["retried"]},
+            {"type": "request_error", "repair_request_id": "after", "request_number": 1,
+             "error": {"type": "RuntimeError", "message": "Gemini returned HTTP status 503"}},
+            {"type": "request_error", "repair_request_id": "after", "request_number": 2, "error": legacy_cap_error},
+            {"type": "repair_request", "step_ids": ["old_history_without_dispatch_details"]},
+        ]
+        self.assertEqual(repair_attempt_counts(records), {"retried": 1, "old_history_without_dispatch_details": 1})
+
     def test_interrupted_replay_does_not_inherit_a_finished_pass(self):
         records = [
             {"type": "run", "run_id": "r", "metadata": {"program": 0, "repair_history": True}},

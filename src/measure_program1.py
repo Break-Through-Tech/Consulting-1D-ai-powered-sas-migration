@@ -9,14 +9,17 @@ from time import perf_counter
 from google.genai import types
 
 from src import translator
+from src.pipeline_retry import RequestNotDispatched
 from src.program1_docker import DockerValidator
 from src.program1_integration import run_program1_with_feedback
 from src.translation_history import LocalJSONHistoryStore, write_json_atomic
 
 
 class MeasuredTranslator(translator.GeminiSASTranslator):
-    def __init__(self):
-        super().__init__(http_options=types.HttpOptions(
+    request_limit = 24
+
+    def __init__(self, *, http_options=None):
+        super().__init__(http_options=http_options or types.HttpOptions(
             retry_options=types.HttpRetryOptions(attempts=1),
             client_args={"follow_redirects": False},
         ))
@@ -36,7 +39,7 @@ class MeasuredTranslator(translator.GeminiSASTranslator):
                 })
             except OSError as error:
                 # Storage failures must never trigger another paid SDK attempt.
-                raise RuntimeError("Could not checkpoint Program 1 request evidence") from error
+                raise RuntimeError("Could not checkpoint request evidence") from error
 
     def translate_macro(self, step_info):
         self.step_ids = [step_info["id"]]
@@ -53,10 +56,12 @@ class MeasuredTranslator(translator.GeminiSASTranslator):
         self._checkpoint()
         return super().repair_program1(steps, previous_code, feedback)
 
-    def _program1_generate_content(self, **request):
-        # Six initial translations and two batched repairs, each with up to three tries.
-        if len(self.requests) >= 24:
-            raise ValueError("Program 1 measurement stopped at the 24-request limit.")
+    def check_request_budget(self):
+        if len(self.requests) >= self.request_limit:
+            raise RequestNotDispatched(f"Measurement stopped at the {self.request_limit}-request limit.")
+
+    def _generate_content(self, **request):
+        self.check_request_budget()
         request["config"].automatic_continuation = False
         call = {"attempt": self.attempt, "step_ids": self.step_ids, "status": "reserved",
                 "elapsed_seconds": None, "usage": None}
@@ -64,7 +69,7 @@ class MeasuredTranslator(translator.GeminiSASTranslator):
         self._checkpoint()
         start = perf_counter()
         try:
-            response = super()._program1_generate_content(**request)
+            response = super()._generate_content(**request)
         except Exception:
             call["elapsed_seconds"] = perf_counter() - start
             call["status"] = "failed"

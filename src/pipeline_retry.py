@@ -15,6 +15,10 @@ RETRYABLE_EXCEPTIONS = (
 )
 
 
+class RequestNotDispatched(ValueError):
+    """A local condition prevented the request from reaching the API."""
+
+
 class RetryFailure(Exception):
     """A transient failure persisted until retries were exhausted."""
 

@@ -178,12 +178,12 @@ class GeminiSASTranslator:
         self.client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY"), **options)
         self.model_name = "gemini-3.5-flash-lite"
 
-    def _program1_generate_content(self, **request):
+    def _generate_content(self, **request):
         return self.client.models.generate_content(**request)
 
     def repair_program1(self, steps, previous_code, feedback):
         """Repair the shared macro and failed groups using validator diagnostics."""
-        response = self._program1_generate_content(
+        response = self._generate_content(
             model=self.model_name,
             contents=json.dumps({
                 "steps": steps,
@@ -242,7 +242,7 @@ class GeminiSASTranslator:
             Implementation Notes from Manifest:
             {step_info.get('notes')}"""
 
-        response = self._program1_generate_content(
+        response = self._generate_content(
             model=self.model_name,
             contents=user_prompt,
             config=types.GenerateContentConfig(
@@ -273,7 +273,7 @@ class GeminiSASTranslator:
             {step_info.get('sas_code')}
             Generate Python code assigning the output to out_df.
             """
-        response = self._program1_generate_content(
+        response = self._generate_content(
             model=self.model_name,
             contents=user_prompt,
             config=types.GenerateContentConfig(
@@ -290,7 +290,7 @@ class GeminiSASTranslator:
     # -- Programs 0 and 2: general SAS steps and macros (issue #61) -----------
 
     def _generate_code(self, system_prompt: str, user_prompt: str) -> str:
-        response = self.client.models.generate_content(
+        response = self._generate_content(
             model=self.model_name,
             contents=user_prompt,
             config=types.GenerateContentConfig(

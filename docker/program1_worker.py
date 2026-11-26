@@ -20,10 +20,13 @@ def check_isolation():
 def main():
     check_isolation()
     sys.path.insert(0, str(INPUT))
-    from src.program1_integration import run_reviewed_program1
     from src.translation_history import write_json_atomic
 
-    if sys.argv[1:] == ["--check"]:
+    if sys.argv[1:] in (["--check"], ["--check-steps"]):
+        if sys.argv[1] == "--check-steps":
+            from src.step_worker import run
+        else:
+            from src.program1_integration import run_reviewed_program1
         print("ready")
         return
     # Ordinary candidate prints must not corrupt the JSON transport.
@@ -32,16 +35,27 @@ def main():
     SCRATCH.mkdir()
     code = shutil.copytree(INPUT / "code", SCRATCH / "code")
     data = SCRATCH / "data"
+    if sys.argv[1:] == ["--steps"]:
+        from src.step_worker import run
+        payload = run(INPUT, code)
+    else:
+        payload = run_program1(code, data)
+    path = SCRATCH / "response.json"
+    write_json_atomic(path, payload)
+    with os.fdopen(result_fd, "wb") as stream:
+        stream.write(path.read_bytes())
+
+
+def run_program1(code, data):
+    from src.program1_integration import run_reviewed_program1
+
     report = run_reviewed_program1(
         code_dir=code, input_csv=INPUT / "input.csv", output_dir=data,
         manifest_path=INPUT / "manifest.json", config_path=INPUT / "groups.json",
         sas_output_dir=INPUT / "references", on_error="report",
     )
     tables = {p.stem: p.read_text(encoding="utf-8") for p in data.glob("*.csv")}
-    path = SCRATCH / "response.json"
-    write_json_atomic(path, {"report": report, "tables": tables})
-    with os.fdopen(result_fd, "wb") as stream:
-        stream.write(path.read_bytes())
+    return {"report": report, "tables": tables}
 
 
 if __name__ == "__main__":

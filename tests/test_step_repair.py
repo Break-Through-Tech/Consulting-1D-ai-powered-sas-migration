@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pandas as pd
+
 from src import generate_steps, run_program
 from src.step_repair import run_steps_with_repair
 from src.step_runner import generate_step_code, run_saved_steps
@@ -86,6 +88,64 @@ class RuntimeRepairTests(unittest.TestCase):
         self.assertEqual(second["previous_candidate_id"], first["record_id"])
         self.assertEqual(third["previous_candidate_id"], second["record_id"])
         self.assertEqual(next(r for r in records if r["type"] == "generation_error")["candidate_id"], first["record_id"])
+
+    def test_caller_repairs_get_only_the_linked_macro_source(self):
+        definitions = [
+            {**macro_step(), "id": f"{name}_macro", "sas_code": f"%macro {name}(); %mend;"}
+            for name in ("nation_avg", "kmeans", "unrelated")
+        ]
+        callers = [data_step("avg", outputs=("WORK.AVG",), depends=["nation_avg_macro"]),
+                   data_step("cluster", outputs=("WORK.CLUSTER",), depends=["kmeans_macro"])]
+        plan = definitions + callers
+        code = {
+            "nation_avg_macro": "def nation_avg(df, out):\n"
+                                "    return {out: pd.DataFrame({'avg': [df['score'].mean()]})}",
+            "kmeans_macro": "def kmeans(df, var):\n"
+                            "    return sas_procs.univariate_percentiles(df, var, [20])",
+            "unrelated_macro": "def unrelated():\n    return 'unrelated source'",
+            "avg": "outputs = {'WORK.AVG': nation_avg(datasets['WORK.A'], 'avg')}",
+            "cluster": "outputs = {'WORK.CLUSTER': kmeans(datasets['WORK.A'], ['score'])}",
+        }
+        translator = FakeTranslator(code)
+        generate_step_code(translator, plan, self.folder)
+        self.assertIsNone(translator.feedback)
+        fixes = {
+            "avg": "outputs = {'WORK.AVG': nation_avg(datasets['WORK.A'], 'avg')['avg']}",
+            "cluster": "outputs = {'WORK.CLUSTER': kmeans(datasets['WORK.A'], 'score')}",
+        }
+        repair = Mock()
+        repair.translate_step.side_effect = lambda step, *args, **kwargs: fixes[step["id"]]
+        review = Mock(return_value=True)
+        result = run_steps_with_repair(
+            plan, self.folder, reviewed=True, translator_factory=lambda: repair, review_repair=review,
+            initial_datasets={"WORK.A": pd.DataFrame({"score": [2, 4, 6]})},
+        )
+        self.assertEqual(result["counts"]["ok"], len(plan))
+        self.assertEqual(result["datasets"]["WORK.AVG"]["avg"].tolist(), [4])
+        self.assertEqual(result["datasets"]["WORK.CLUSTER"]["P20"].tolist(), [2])
+        self.assertEqual(review.call_count, 2)
+        repair.translate_macro_definition.assert_not_called()
+        records = self.records(self.folder)
+        originals = {r["step_id"]: r["record_id"] for r in records
+                     if r["type"] == "candidate" and r["origin"] == "generated"}
+        requests = [r for r in records if r["type"] == "repair_request"]
+        self.assertEqual(len(requests), 2)
+        for request, call, (step, macro, error) in zip(requests, repair.translate_step.call_args_list, [
+            ("avg", "nation_avg_macro", "are not DataFrames"),
+            ("cluster", "kmeans_macro", "Data must be 1-dimensional"),
+        ], strict=True):
+            self.assertEqual(request["macro_candidates"], {macro: originals[macro]})
+            self.assertEqual(request["previous_candidate_id"], originals[step])
+            self.assertEqual(request["feedback"], call.kwargs["feedback"])
+            self.assertIn(error, request["feedback"])
+            self.assertIn(code[step], request["feedback"])
+            self.assertIn(code[macro], request["feedback"])
+            self.assertNotIn(code["unrelated_macro"], request["feedback"])
+            self.assertNotIn(code["kmeans_macro" if macro == "nation_avg_macro" else "nation_avg_macro"],
+                             request["feedback"])
+            replacement, = [r for r in records if r["type"] == "candidate"
+                            and r.get("repair_request_id") == request["record_id"]]
+            self.assertEqual(replacement["previous_candidate_id"], originals[step])
 
     def test_decline_saves_candidate_without_executing_or_replacing_working_file(self):
         generate_step_code(SequenceTranslator(["1 / 0"]), self.plan, self.folder)

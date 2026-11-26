@@ -205,7 +205,7 @@ all(entry["status"] == "PASS" for entry in report["outputs"].values() if entry["
 
 ## When a failure triggers a retry
 
-This is the error threshold from #39 and #38. The tolerance is fixed, so there is no "small enough" difference: any `FAIL` is a real difference and is worth a repair. What decides a retry is whether a repair can fix it.
+The validator uses the tolerance from #39 and #38 to report output differences. Each program's repair loop determines whether to request new code.
 
 The Program 1 feedback loop (`run_program1_with_feedback` in `src/program1_integration.py`) already follows this rule:
 
@@ -227,10 +227,10 @@ uses the failed steps in the execution report. The ordinary reviewed replay is o
 
 | Result of an attempt | What happens |
 |---|---|
-| Every output of the program passes | Stop: `PASS`. |
-| A step is `failed` | Retry: ask again for that step, with its error as feedback. |
+| All required steps execute successfully and all target outputs pass | Finish with `PASS`. |
+| A step's generated code fails during execution (`failed`) | Request a replacement for that step with its runtime error as feedback, within the remaining attempt budget. |
 | A step is `blocked` | Do not ask for it. It runs again once the step it waits on is fixed. |
-| An output differs after its steps ran successfully | Report the SAS validation failure. A numerical difference alone does not identify a step to repair. |
+| Steps execute successfully but produce incorrect values | Record the SAS validation failure and finish with `FAIL`. An output mismatch by itself triggers no repair request. |
 | An output fails and its SAS table has repeated or blank keys | Do not retry for it, as in Program 1. |
 | The code is not approved in review | Stop. |
 | The attempt limit is reached | Stop with the last result. Same limit as Program 1. |
