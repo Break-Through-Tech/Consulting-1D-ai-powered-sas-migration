@@ -12,7 +12,7 @@ from src.program1_integration import (
     run_reviewed_program1,
     run_program1_with_feedback,
 )
-from src.translation_history import HistoryStorageError, LocalJSONHistoryStore
+from src.translation_history import HistoryStorageError, LocalJSONHistoryStore, read_program1_attempts
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -185,9 +185,23 @@ class Program1IntegrationTests(unittest.TestCase):
         service.repair_program1.assert_not_called()
 
     def test_feedback_rejects_invalid_limit(self):
-        for limit in (0, -1, True, 1.5):
+        for limit in (0, -1, True, 1.5, 4):
             with self.subTest(limit=limit), self.assertRaises(ValueError):
                 self.feedback_run(FakeTranslator(), max_attempts=limit)
+
+    def test_feedback_stops_if_source_changes_after_approval(self):
+        original = run_reviewed_program1
+
+        def change_source_before_snapshot(**kwargs):
+            path = Path(kwargs["code_dir"]) / "om.py"
+            path.write_bytes(path.read_bytes() + b"\n# edited after approval")
+            return original(**kwargs)
+
+        with patch("src.program1_integration.run_reviewed_program1", side_effect=change_source_before_snapshot):
+            result = self.feedback_run(FakeTranslator())
+        self.assertFalse(result["passed"])
+        self.assertFalse((Path(result["code_dir"]).parent / "data").exists())
+        self.assertFalse(result["attempts"])
 
     def test_feedback_repairs_structural_validation_failure(self):
         class MissingColumnTranslator(FakeTranslator):
@@ -206,6 +220,23 @@ class Program1IntegrationTests(unittest.TestCase):
         result = self.feedback_run(MissingColumnTranslator())
         self.assertTrue(result["passed"])
         self.assertEqual(len(result["attempts"]), 2)
+        initial, repair = read_program1_attempts(self.root / "feedback")
+        self.assertEqual(repair[0]["metadata"]["previous_run_id"], initial[0]["run_id"])
+        request, = [r for r in repair if r["type"] == "repair_request"]
+        self.assertEqual(request["feedback"], {"OUTCOME_SAFETY": result["attempts"][0]["outputs"]["OUTCOME_SAFETY"]["validation"]})
+        self.assertEqual(set(request["step_ids"]), {"grp_score_macro", "os"})
+        original = {r["step_id"]: r["record_id"] for r in initial if r["type"] == "candidate"}
+        for candidate in (r for r in repair if r["type"] == "candidate"):
+            step = candidate["step_id"]
+            self.assertEqual(candidate["previous_candidate_id"], original[step])
+            if step in request["step_ids"]:
+                self.assertEqual(candidate["repair_request_id"], request["record_id"])
+                self.assertEqual(candidate["origin"], "repair")
+            else:
+                self.assertEqual(candidate["origin"], "carried_forward")
+                self.assertNotIn("repair_request_id", candidate)
+            self.assertTrue(any(r["type"] == "outcome" and r["candidate_id"] == candidate["record_id"]
+                                for r in repair))
 
     def test_feedback_detects_regressions_in_previously_passing_groups(self):
         class RegressionTranslator(FakeTranslator):

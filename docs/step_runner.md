@@ -19,6 +19,31 @@ python -m src.run_program 0 --code-dir output/program0_generated_code --reviewed
 
 The free Gemini tier allows 15 requests a minute. `--min-interval 5` keeps a full run (about 33 requests) under that, and takes about 3 minutes.
 
+### Optional runtime repair
+
+After reviewing the generated files, add `--repair` to the run command to enable
+Gemini repair for that working directory. This applies to Programs 0 and 2.
+
+```sh
+python -m src.run_program 0 --code-dir output/program0_generated_code --reviewed --repair
+```
+
+Only failed steps receive a new request, with the error and previous code.
+Review each replacement before approving it. Approved replacements update the
+working files and the plan runs again from its original inputs. Blocked steps
+reuse their code after their dependencies recover. Missing input tables and
+runner setup errors are recorded as blocked. Each step has at most two
+fix requests after initial generation, including syntax fixes already in its
+history. Transient request retries are counted separately. SAS mismatches
+alone do not trigger repair.
+
+For older reviewed files or fixtures with no history, repair starts a working
+copy under `output/step_repairs/` and prints its path. First-generation success
+is unknown for imported files. Fix counts start at import. Reuse that working
+copy to retain its remaining attempt budget. Replays without
+`--repair` never request new code. Execution uses the existing host runner
+with the current process's permissions, including during repair.
+
 ## What generated code can use
 
 Each step's code runs in a fresh scope with:
@@ -73,7 +98,7 @@ Both sets share `_generate_code`, which makes the request. The Program 1 methods
 
 The rules live in `src/translator.py`, in `STEP_PROMPT`, `MACRO_DEFINITION_PROMPT` and the shared `SAS_BEHAVIOUR_PROMPT`, `SAS_CONVENTIONS_PROMPT` and `SAS_PROCS_PROMPT`. When a step goes wrong, add the rule there. Do not edit `manifests/*.json` by hand: the parser writes them, and a test checks they are up to date.
 
-Both translation methods take `feedback=`, a sentence that is added to the request. The generator uses it to say why the last answer was rejected. A repair loop (#66) can use it for run-time errors.
+Both translation methods accept `feedback=` for syntax and runtime failures.
 
 ## What was learned from real runs (#61, #82)
 
@@ -82,10 +107,9 @@ Ten generate, read, run passes on `gemini-3.5-flash-lite`:
 - Most failures were ordinary, not wrong SAS logic: a column under another case, a name list expanded wrongly, a table with the wrong shape, a function that does not exist.
 - **Gemini's output changes between runs.** Passes 7 to 9 each got 2 of 3 Program 0 outputs right, a different pair each time. Pass 10 got all 3. That run is saved as a test fixture (`tests/fixtures/program0_generated/`) and `tests/test_program0_generated_fixture.py` checks it with no Gemini call.
 - **Program 2 took 11 rounds.** The first run ran 6 of 31 steps. Hao asked for the failed steps again by hand, with the error, the validation result and notes from reading the SAS code, until both outputs matched SAS. That run is saved as a test fixture (`tests/fixtures/program2_generated/`, `tests/test_program2_generated_fixture.py`, PR #95). About half of the rounds were column-case errors, which `SasFrame` now covers for lists, `sort_values`, `drop`, `groupby` and `merge` (#93).
-- Making it stable needs run-time errors and validator differences fed back to Gemini automatically (#66).
+- The runtime repair command automates re-asking failed steps. Assigning an output-only SAS mismatch to a particular step remains separate work.
 
 ## Not done yet
 
 - **Program 2 from AI outputs.** `run_program 2` starts from the SAS outputs of Programs 0 and 1 and the measure lists and counts in `config/measure_groups.json` (`program2_inputs`, #72). Running it on the generated outputs of the earlier programs is part of the chain.
-- **Repair and history for steps** (#66).
 - **Program 0, 1 and 2 chained on generated code** (#32).

@@ -20,6 +20,7 @@ translation_history.json
 /output/validation_report/
 # Code written by python -m src.generate_steps. Read it first; do not commit it.
 /output/program*_generated_code/
+/output/step_repairs/
 .venv/
 /output/chain_runs/
 /tests/fixtures/program1_generated/.translation_history/

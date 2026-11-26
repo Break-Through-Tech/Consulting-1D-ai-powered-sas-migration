@@ -222,14 +222,15 @@ This is not the same as the retries for temporary Gemini errors (`retry_call` in
 
 ### Programs 0 and 2 (step manifests)
 
-The loop for Programs 0 and 2 (#66) should repair run-time errors too. Hao and Miguel proposed this in #88 and #66; Shane (#66 owner) has not confirmed it yet. Most failures there are a step whose code raises (`failed` in `run_steps_report`), and asking for that step again with its error as `feedback=` is what makes runs stable. This rule is not built yet.
+For Programs 0 and 2, the [opt-in repair loop](step_runner.md#optional-runtime-repair)
+uses the failed steps in the execution report. The ordinary reviewed replay is offline.
 
 | Result of an attempt | What happens |
 |---|---|
 | Every output of the program passes | Stop: `PASS`. |
 | A step is `failed` | Retry: ask again for that step, with its error as feedback. |
 | A step is `blocked` | Do not ask for it. It runs again once the step it waits on is fixed. |
-| An output fails | Retry, as in Program 1, with its `validation` as feedback. Which steps to ask for again is not decided yet (#71). A first version asks only for the `failed` steps. |
+| An output differs after its steps ran successfully | Report the SAS validation failure. A numerical difference alone does not identify a step to repair. |
 | An output fails and its SAS table has repeated or blank keys | Do not retry for it, as in Program 1. |
 | The code is not approved in review | Stop. |
 | The attempt limit is reached | Stop with the last result. Same limit as Program 1. |

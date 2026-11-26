@@ -20,6 +20,7 @@ import re
 import time
 from pathlib import Path
 from typing import Callable, List
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -27,17 +28,22 @@ import pandas as pd
 from src import sas_procs
 from src.orchestrate import run_step_plan
 from src.pipeline_retry import retry_call
+from src.translation_history import CandidateHistory, HistoryStorageError, error_details
 
 
 class StepExecutionError(RuntimeError):
     """A translated step could not be reviewed, run or did not return its results."""
 
 
+class StepSetupError(RuntimeError):
+    """The runner cannot prepare this step for execution."""
+
+
 def macro_name(step):
     """Name of the macro a `macro` step defines, e.g. 'kmeans' for %macro kmeans(...)."""
     match = re.search(r"%macro\s+(\w+)", step.get("sas_code", ""), re.IGNORECASE)
     if not match:
-        raise StepExecutionError(f"{step['id']}: no %macro definition found in the SAS code.")
+        raise StepSetupError(f"{step['id']}: no %macro definition found in the SAS code.")
     return match.group(1).lower()
 
 
@@ -300,6 +306,9 @@ class StepRunner:
         return {}
 
     def _run_step(self, step, macro_vars, datasets):
+        for name in step.get("inputs", []):
+            if not isinstance(datasets.get(name), pd.DataFrame):
+                raise StepSetupError(f"{step['id']}: required input {name!r} is missing or is not a DataFrame.")
         signatures = {name: f"{name}{inspect.signature(fn)}" for name, fn in self.macros.items()}
         code = self._request(
             lambda: self.translator.translate_step(step, dict(macro_vars), signatures)
@@ -365,6 +374,61 @@ def _code_problem(code):
     return None
 
 
+def request_step_candidate(translator, step, signatures, history, *, feedback=None, execution_id=None,
+                           previous_candidate_id=None,
+                           max_attempts=3, retry_delay_seconds=2.0):
+    """Record one candidate request. Transport retries do not create extra candidates."""
+    step_id = step["id"]
+    request_id = None
+    if feedback is not None:
+        prior = history.pointer["candidates"].get(step_id)
+        if previous_candidate_id is None and prior:
+            previous_candidate_id = prior["candidate_id"]
+        repair = {
+            "type": "repair_request", "step_ids": [step_id], "feedback": feedback,
+            "previous_candidate_id": previous_candidate_id,
+        }
+        if execution_id is not None:
+            repair["execution_id"] = execution_id
+        request_id = history.record(repair)
+    requests = 0
+
+    def request():
+        nonlocal requests
+        requests += 1
+        extra = {"feedback": feedback} if feedback is not None else {}
+        try:
+            if step["kind"] == "macro":
+                return translator.translate_macro_definition(step, macro_name(step), **extra)
+            return translator.translate_step(step, dict(step.get("macro_vars", {})), dict(signatures), **extra)
+        except Exception as error:
+            try:
+                history.record({"type": "request_error", "step_id": step_id,
+                                "repair_request_id": request_id, "request_number": requests,
+                                "error": error_details(error)})
+            except Exception as storage_error:
+                raise HistoryStorageError(str(storage_error)) from storage_error
+            raise
+
+    code, _ = retry_call(request, max_attempts=max_attempts, delay_seconds=retry_delay_seconds)
+    candidate_id = None
+    if isinstance(code, str):
+        # A repair after a non-string response is not a first-generation success.
+        origin = "generated" if request_id is None else "repair"
+        candidate_id = history.candidate(
+            step, code, origin=origin, previous_candidate_id=previous_candidate_id,
+            repair_request_id=request_id, select=execution_id is None,
+        )
+    problem = _code_problem(code)
+    if not problem and step["kind"] == "macro" and _signature(macro_name(step), code) is None:
+        problem = f"generated code must define a function named {macro_name(step)!r}."
+    if problem:
+        history.record({"type": "generation_error", "step_id": step_id,
+                        "candidate_id": candidate_id, "repair_request_id": request_id,
+                        "error": {"type": "ValueError", "message": problem}})
+    return code, problem, candidate_id
+
+
 def generate_step_code(
     translator,
     plan,
@@ -374,6 +438,7 @@ def generate_step_code(
     retry_delay_seconds=2.0,
     min_interval_seconds=0.0,
     max_syntax_attempts=3,
+    program=None,
 ):
     """Translate every step of a plan and save <step id>.py files. Runs no generated code.
 
@@ -381,6 +446,8 @@ def generate_step_code(
     are never mixed. min_interval_seconds waits between requests, for API plans
     with a per-minute limit (the Gemini free tier allows 15 requests a minute).
     """
+    if type(max_syntax_attempts) is not int or not 1 <= max_syntax_attempts <= 3:
+        raise ValueError("max_syntax_attempts must be an integer between 1 and 3.")
     if min_interval_seconds < 0:
         raise ValueError("min_interval_seconds cannot be negative.")
     code_dir = Path(code_dir)
@@ -389,6 +456,12 @@ def generate_step_code(
             f"Code directory is not empty: {code_dir}. Use a new directory."
         )
     code_dir.mkdir(parents=True, exist_ok=True)
+    metadata = {"repair_history": True}
+    if program is not None:
+        metadata["program"] = program
+    if isinstance(getattr(translator, "model_name", None), str):
+        metadata["model_name"] = translator.model_name
+    history = CandidateHistory(code_dir, metadata=metadata, new=True)
 
     signatures = {}
     files = {}
@@ -403,34 +476,22 @@ def generate_step_code(
 
         name = macro_name(step) if step["kind"] == "macro" else None
 
-        def request(feedback=None, step=step, name=name):
-            # Runtime macro values are not known yet. The prompt tells the AI to read
-            # them from macro_vars, so the placeholder text stays in the request.
-            extra = {"feedback": feedback} if feedback else {}
-            if name:
-                return translator.translate_macro_definition(step, name, **extra)
-            return translator.translate_step(
-                step, dict(step.get("macro_vars", {})), dict(signatures), **extra
-            )
-
         feedback = None
         for syntax_attempt in range(1, max_syntax_attempts + 1):
-            code, _attempts = retry_call(
-                lambda: request(feedback), max_attempts=max_attempts, delay_seconds=retry_delay_seconds,
+            code, problem, _ = request_step_candidate(
+                translator, step, signatures, history, feedback=feedback,
+                max_attempts=max_attempts, retry_delay_seconds=retry_delay_seconds,
             )
-            problem = _code_problem(code)
             if problem is None:
                 break
-            if syntax_attempt == max_syntax_attempts:
+            # A syntactically valid answer missing its macro has always stopped generation.
+            if syntax_attempt == max_syntax_attempts or (name and _code_problem(code) is None):
                 raise ValueError(f"{step['id']}: {problem}")
             # At temperature 0 the same request gives the same answer, so say what was wrong.
             feedback = f"Your previous answer was rejected: {problem}"
 
         if step["kind"] == "macro":
-            signature = _signature(name, code)
-            if signature is None:
-                raise ValueError(f"{step['id']}: generated code must define a function named {name!r}.")
-            signatures[name] = signature
+            signatures[name] = _signature(name, code)
 
         path = code_dir / f"{step['id']}.py"
         path.write_bytes(code.encode("utf-8"))
@@ -444,6 +505,7 @@ class SavedStepCode:
 
     def __init__(self, code_dir):
         self.code_dir = Path(code_dir)
+        self.snapshot = {}
         if not self.code_dir.is_dir():
             raise FileNotFoundError(f"Code directory not found: {self.code_dir}")
 
@@ -457,13 +519,31 @@ class SavedStepCode:
             raise FileNotFoundError(f"Missing saved code for steps: {missing}")
 
     def _read(self, step):
+        if step["id"] in self.snapshot:
+            return self.snapshot[step["id"]]
         return (self.code_dir / f"{step['id']}.py").read_bytes().decode("utf-8")
+
+    def freeze(self, plan):
+        self.check(plan)
+        self.snapshot = {step["id"]: self._read(step) for step in plan if step["action"] == "translate"}
 
     def translate_macro_definition(self, step, macro_name):
         return self._read(step)
 
     def translate_step(self, step, macro_vars, macros):
         return self._read(step)
+
+
+def _start_execution(plan, saved, history):
+    execution_id = uuid4().hex
+    candidates = {
+        step["id"]: history.candidate(step, saved.snapshot[step["id"]], origin="reviewed_file", reuse=True)
+        for step in plan if step["action"] == "translate"
+    }
+    history.record({"type": "execution_started", "execution_id": execution_id,
+                    "candidates": candidates, "execution_plan": plan,
+                    "review_status": "caller_supplied_reviewed_code"})
+    return execution_id, candidates
 
 
 def run_saved_steps(
@@ -484,12 +564,40 @@ def run_saved_steps(
             f"{code_dir} first, then pass reviewed=True."
         )
     saved = SavedStepCode(code_dir)
-    saved.check(plan)
+    saved.freeze(plan)
     runner = StepRunner(saved, lambda step, code: True, max_attempts=1)
-    return run_step_plan(
-        plan, runner,
-        initial_macro_vars=initial_macro_vars, initial_datasets=initial_datasets,
-    )
+    inputs = dict(initial_macro_vars=initial_macro_vars, initial_datasets=initial_datasets)
+    if not (Path(code_dir) / "translation_history.json").exists():
+        return run_step_plan(plan, runner, **inputs)
+
+    history = CandidateHistory(code_dir)
+    execution_id, candidates = _start_execution(plan, saved, history)
+    active = None
+    failure_status = "failed"
+
+    def execute(step, macro_vars, datasets):
+        nonlocal active, failure_status
+        active = step
+        try:
+            return runner(step, macro_vars, datasets)
+        except Exception as error:
+            failure_status = "failed" if isinstance(error, StepExecutionError) else "blocked"
+            raise
+
+    def outcome(step, status="ok", error=None):
+        nonlocal active
+        active = None
+        history.record({"type": "outcome", "execution_id": execution_id,
+                        "candidate_id": candidates[step["id"]], "validation_status": "not_run",
+                        "result": {"id": step["id"], "kind": step["kind"], "status": status, "error": error}})
+
+    try:
+        return run_step_plan(plan, execute, on_step_complete=outcome, **inputs)
+    except Exception as error:
+        if active is not None:
+            outcome(active, failure_status, str(error))
+        history.record({"type": "execution_error", "execution_id": execution_id, "error": error_details(error)})
+        raise
 
 
 def run_steps_report(
@@ -525,7 +633,15 @@ def run_steps_report(
             f"{code_dir} first, then pass reviewed=True."
         )
     saved = SavedStepCode(code_dir)
-    saved.check(plan)
+    saved.freeze(plan)
+    history = CandidateHistory(code_dir) if (Path(code_dir) / "translation_history.json").exists() else None
+    return _report_snapshot(plan, saved, history, initial_macro_vars, initial_datasets)
+
+
+def _report_snapshot(plan, saved, history, initial_macro_vars, initial_datasets):
+    candidates = {}
+    if history:
+        execution_id, candidates = _start_execution(plan, saved, history)
     runner = StepRunner(saved, lambda step, code: True, max_attempts=1)
 
     macro_vars = dict(initial_macro_vars or {})
@@ -573,11 +689,21 @@ def run_steps_report(
                     datasets.update(result.get("datasets", {}))
                     macro_vars.update(returned)
                     entry["status"] = "ok"
-                except Exception as error:
+                except StepExecutionError as error:
                     entry["status"] = "failed"
                     entry["error"] = f"{type(error).__name__}: {error}"
+                except Exception as error:
+                    entry["status"] = "blocked"
+                    entry["error"] = f"{type(error).__name__}: {error}"
+                    entry["blocked_by"] = ["step setup"]
         status_of[step["id"]] = entry["status"]
+        if step["id"] in candidates:
+            history.record({"type": "outcome", "candidate_id": candidates[step["id"]],
+                            "execution_id": execution_id, "result": entry, "validation_status": "not_run"})
 
     counts = {status: sum(entry["status"] == status for entry in steps)
               for status in ("ok", "skipped", "failed", "blocked")}
-    return {"steps": steps, "counts": counts, "datasets": datasets, "macro_vars": macro_vars}
+    report = {"steps": steps, "counts": counts, "datasets": datasets, "macro_vars": macro_vars}
+    if history:
+        report["execution_id"] = execution_id
+    return report

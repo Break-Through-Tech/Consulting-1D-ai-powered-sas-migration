@@ -17,6 +17,8 @@ from pathlib import Path
 from src import data_io, validation_report
 from src.orchestrate import DEFAULT_GROUP_CONFIG, build_step_plan, load_measure_groups
 from src.step_runner import run_steps_report
+from src.step_repair import run_steps_with_repair
+from src.translation_history import CandidateHistory
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAM_OUTPUTS = {
@@ -48,10 +50,22 @@ def program2_inputs(config_path=DEFAULT_GROUP_CONFIG):
     return datasets, macro_vars
 
 
+def _repair_translator():
+    from src.translator import GeminiSASTranslator
+    return GeminiSASTranslator()
+
+
+def _review_repair(step, code):
+    print(f"Replacement for {step['id']}:\n{code}")
+    return input("Run these exact replacement bytes? Type yes to approve: ").strip() == "yes"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("program", choices=["0", "2"], help="SAS program to run")
     parser.add_argument("--code-dir", help="folder of saved <step id>.py files")
+    parser.add_argument("--repair", action="store_true",
+                        help="ask Gemini for failed steps only and review each replacement")
     parser.add_argument(
         "--reviewed", action="store_true",
         help="say that you read every file in the code folder; without it nothing runs",
@@ -71,10 +85,14 @@ def main(argv=None):
         datasets, macro_vars = {"HC.ALLDATA_2025JUL": data_io.load_input()}, {}
     else:
         datasets, macro_vars = program2_inputs()
-    result = run_steps_report(
-        plan, code_dir, reviewed=True,
-        initial_datasets=datasets, initial_macro_vars=macro_vars,
-    )
+    inputs = dict(reviewed=True, initial_datasets=datasets, initial_macro_vars=macro_vars)
+    if args.repair:
+        result = run_steps_with_repair(plan, code_dir, program=program, translator_factory=_repair_translator,
+                                       review_repair=_review_repair, **inputs)
+        code_dir = Path(result["code_dir"])
+        print(f"Repair code and history: {code_dir}")
+    else:
+        result = run_steps_report(plan, code_dir, **inputs)
 
     print("STEPS")
     for entry in result["steps"]:
@@ -92,7 +110,15 @@ def main(argv=None):
 
     outputs_pass = all(report["outputs"][name]["status"] == "PASS" for name in PROGRAM_OUTPUTS[program])
     steps_ok = not (result["counts"]["failed"] or result["counts"]["blocked"])
-    return 0 if outputs_pass and steps_ok else 1
+    passed = outputs_pass and steps_ok
+    if "execution_id" in result:
+        CandidateHistory(code_dir).record({
+            "type": "run_finished", "execution_id": result["execution_id"],
+            "status": result.get("repair_status", "PASS" if passed else "FAIL"),
+            "step_statuses": {s["id"]: s["status"] for s in result["steps"]},
+            "outputs": {name: report["outputs"][name] for name in PROGRAM_OUTPUTS[program]},
+        })
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":
