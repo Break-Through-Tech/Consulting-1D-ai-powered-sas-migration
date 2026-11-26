@@ -16,6 +16,9 @@ MODULES = ("program1_integration", "orchestrate", "validate", "pipeline_retry", 
 
 
 class DockerValidator:
+    modules = MODULES
+    check = "--check"
+
     def __init__(self):
         # A fresh environment also prevents forwarding Windows variables via WSLENV.
         self.env = {k: os.environ[k] for k in ("SystemRoot", "TEMP", "TMP") if k in os.environ}
@@ -34,17 +37,16 @@ class DockerValidator:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             self._stage_worker(root)
-            if self._invoke(root, "--check").strip() != b"ready":
+            if self._invoke(root, self.check).strip() != b"ready":
                 raise RuntimeError("Docker validator preflight failed")
 
     def _docker(self, *args):
         return subprocess.check_output([*self.command, *args], env=self.env, timeout=30)
 
-    @staticmethod
-    def _stage_worker(root):
+    def _stage_worker(self, root):
         root.chmod(0o755)
         (root / "src").mkdir()
-        for module in MODULES:
+        for module in self.modules:
             shutil.copyfile(ROOT / "src" / f"{module}.py", root / "src" / f"{module}.py")
         (root / "src/__init__.py").touch()
         shutil.copyfile(ROOT / "docker/program1_worker.py", root / "worker.py")

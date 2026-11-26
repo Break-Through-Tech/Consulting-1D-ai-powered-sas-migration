@@ -29,6 +29,8 @@ python -m src.run_program 0 --code-dir output/program0_generated_code --reviewed
 ```
 
 Only failed steps receive a new request, with the error and previous code.
+For a caller, the feedback also includes its directly required macro source and
+the saved macro candidate ID.
 Review each replacement before approving it. Approved replacements update the
 working files and the plan runs again from its original inputs. Blocked steps
 reuse their code after their dependencies recover. Missing input tables and

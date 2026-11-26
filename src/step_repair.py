@@ -45,7 +45,9 @@ def _review_replacement(step, code, candidate_id, history, saved, review_repair)
 
 
 def run_steps_with_repair(plan, code_dir, *, reviewed, translator_factory, review_repair,
-                          initial_macro_vars=None, initial_datasets=None, program=None):
+                          initial_macro_vars=None, initial_datasets=None, program=None,
+                          execute_snapshot=_report_snapshot, approved_snapshot=None,
+                          check_request_budget=None):
     """Replay a reviewed snapshot, asking only for steps that actually failed.
 
     Approved replacements update the generated working files. Every returned
@@ -56,6 +58,8 @@ def run_steps_with_repair(plan, code_dir, *, reviewed, translator_factory, revie
     code_dir = Path(code_dir)
     saved = SavedStepCode(code_dir)
     saved.freeze(plan)
+    if approved_snapshot is not None and saved.snapshot != approved_snapshot:
+        raise ValueError("Step files changed after review. Start a fresh review before execution.")
     if (code_dir / "translation_history.json").is_file():
         history = CandidateHistory(code_dir)
     else:
@@ -75,9 +79,10 @@ def run_steps_with_repair(plan, code_dir, *, reviewed, translator_factory, revie
             program is not None and metadata.get("program", program) != program):
         raise ValueError("Code directory does not contain this program's complete generation history.")
     fixes = Counter(step_id for r in records if r["type"] == "repair_request" for step_id in r["step_ids"])
+    macros = {step["id"] for step in plan if step["kind"] == "macro" and step["id"] in saved.snapshot}
     translator = None
     while True:
-        report = _report_snapshot(plan, saved, history, initial_macro_vars, initial_datasets)
+        report = execute_snapshot(plan, saved, history, initial_macro_vars, initial_datasets)
         report["code_dir"] = str(saved.code_dir)
         failures = {entry["id"]: entry["error"] for entry in report["steps"] if entry["status"] == "failed"}
         if not failures:
@@ -91,13 +96,21 @@ def run_steps_with_repair(plan, code_dir, *, reviewed, translator_factory, revie
             if step_id in failures:
                 feedback = f"{failures[step_id]}\nPrevious code:\n{saved.snapshot[step_id]}"
                 previous_id = history.pointer["candidates"][step_id]["candidate_id"]
+                macro_candidates = {dep: history.pointer["candidates"][dep]["candidate_id"]
+                                    for dep in step.get("depends_on", []) if dep in macros}
+                macro_feedback = "".join(
+                    f"\n\nShared macro {dep} (candidate {candidate}):\n"
+                    f"```python\n{saved.snapshot[dep]}\n```"
+                    for dep, candidate in macro_candidates.items()
+                )
                 while fixes[step_id] < 2:  # Three attempts, including initial generation.
                     if translator is None:
                         translator = translator_factory()
                     fixes[step_id] += 1
                     code, problem, candidate_id = request_step_candidate(
-                        translator, step, signatures, history, feedback=feedback,
+                        translator, step, signatures, history, feedback=feedback + macro_feedback,
                         execution_id=report["execution_id"], previous_candidate_id=previous_id,
+                        macro_candidates=macro_candidates, check_request_budget=check_request_budget,
                     )
                     if problem:
                         previous_id = candidate_id or previous_id

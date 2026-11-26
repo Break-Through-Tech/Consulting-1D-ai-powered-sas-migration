@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import Counter
 from pathlib import Path
 from shutil import copytree
@@ -71,10 +72,31 @@ def _first_try(candidate, outcomes, invalid_candidates):
     return first_try
 
 
+def _rejected_before_first_request(record):
+    if record["type"] == "feedback_review" and record.get("approved") is False:
+        return True
+    if record.get("request_number") != 1:
+        return False
+    if record["type"] == "request_rejected":
+        return True
+    error = record.get("error", {})
+    # Older measured runs saved a local budget rejection as a request error.
+    return (record["type"] == "request_error" and error.get("type") == "ValueError"
+            and re.fullmatch(r"Measurement stopped at the \d+-request limit\.", error.get("message", "")) is not None)
+
+
+def repair_attempt_counts(records):
+    """Count logical repairs, excluding ones known to have stopped before dispatch."""
+    rejected = {record["repair_request_id"] for record in records
+                if record.get("repair_request_id") and _rejected_before_first_request(record)}
+    return Counter(step_id for record in records if record["type"] == "repair_request"
+                   and record.get("record_id") not in rejected for step_id in record["step_ids"])
+
+
 def _history_steps(records, *, complete_repair_history, execution_statuses=None):
     candidates_by_step = {}
     outcomes_by_candidate = {}
-    repairs_by_step = Counter()
+    repairs_by_step = repair_attempt_counts(records)
     invalid_candidates = set()
     for record in records:
         kind = record["type"]
@@ -82,11 +104,9 @@ def _history_steps(records, *, complete_repair_history, execution_statuses=None)
             candidates_by_step.setdefault(record["step_id"], []).append(record)
         elif kind == "outcome" and record.get("candidate_id"):
             outcomes_by_candidate.setdefault(record["candidate_id"], []).append(record)
-        elif kind == "repair_request":
-            repairs_by_step.update(record["step_ids"])
         elif kind == "generation_error" and record.get("candidate_id"):
             invalid_candidates.add(record["candidate_id"])
-        elif kind == "request_error" and record.get("step_id"):
+        elif kind in {"request_error", "request_rejected"} and record.get("step_id"):
             candidates_by_step.setdefault(record["step_id"], [])
 
     steps = []
@@ -244,6 +264,31 @@ def _stored_result(program, store, run_id, measurements):
     return history_result(program, records, measurements.get(run_id))
 
 
+def measured_step_result(folder):
+    summary = json.loads((folder / "measurement.json").read_text(encoding="utf-8"))
+    program = summary["program"]
+    if program not in (0, 2):
+        raise ValueError("Expected a Program 0 or 2 measurement")
+    code = folder / "code"
+    run_id = json.loads((code / "translation_history.json").read_text(encoding="utf-8"))["run_id"]
+    if summary["run_id"] not in (None, run_id):
+        raise ValueError("Measurement refers to another history")
+    records = LocalJSONHistoryStore(code / ".translation_history").read_run(run_id)
+    result = history_result(program, records, {
+        "configuration": summary.get("configuration", {}), "elapsed_seconds": summary["elapsed_seconds"],
+        "time_scope": "generation_execution_and_validation_excluding_review",
+    })
+    status = summary["status"]
+    if status in {"PASS", "FAIL"} and result["status"] != status:
+        raise ValueError("Terminal measurement disagrees with execution history")
+    if status == "PASS":
+        expected = {name.upper() for name, spec in data_io.OUTPUTS.items() if spec["program"] == program}
+        if set(result["outputs"]) != expected or any(o["status"] != "PASS" for o in result["outputs"].values()):
+            raise ValueError("Missing passing SAS checks")
+    result["status"] = status
+    return result
+
+
 def measured_program1_result(folder, measurements):
     """Join the first attempt's generation history to this run's observed repairs."""
     sidecar = folder / "measurement.json"
@@ -376,6 +421,9 @@ def main(argv=None):
     parser.add_argument("--program1-run", type=Path, action="append", default=[],
                         help="include a Program 1 feedback loop, with optional measurement.json (repeatable)")
     parser.add_argument("--output", type=Path, default=DEFAULT_RESULTS)
+    parser.add_argument("--step-run", type=Path, action="append", default=[],
+                        help="include a measured Program 0 or 2 run in a new output file")
+    parser.add_argument("--append-to", type=Path, help="include observations from an existing v1 results file")
     parser.add_argument(
         "--history", nargs=3, action="append", default=[], metavar=("PROGRAM", "STORE", "RUN_ID"),
         help="add a run read from a .translation_history directory (repeatable)",
@@ -389,8 +437,10 @@ def main(argv=None):
         help="execute the checked-in, reviewed Python and the handwritten baseline",
     )
     args = parser.parse_args(argv)
-    if not (args.history or args.program1_run or args.replay_reviewed_fixtures):
-        parser.error("supply --history, --program1-run or --replay-reviewed-fixtures")
+    if not (args.history or args.program1_run or args.step_run or args.replay_reviewed_fixtures):
+        parser.error("supply --history, --program1-run, --step-run or --replay-reviewed-fixtures")
+    if (args.step_run or args.append_to) and args.output.resolve() == DEFAULT_RESULTS.resolve():
+        parser.error("export step measurements to a new file using --output")
     if any(program not in {"0", "1", "2"} for program, _, _ in args.history):
         parser.error("history program must be 0, 1 or 2")
 
@@ -400,12 +450,25 @@ def main(argv=None):
         for program, store, run_id in args.history
     ]
     runs.extend(measured_program1_result(folder, measurements) for folder in args.program1_run)
-    if len({run["id"] for run in runs}) != len(runs):
-        parser.error("history run IDs must be unique")
+    runs.extend(measured_step_result(folder) for folder in args.step_run)
+    base = build_results([])
+    if args.append_to:
+        base = json.loads(args.append_to.read_text(encoding="utf-8"))
+        if base["schema_version"] != 1:
+            raise ValueError("Expected version-1 results")
+        runs = base["runs"] + runs
     if args.replay_reviewed_fixtures:
         runs.extend(offline_results())
+    if len({run["id"] for run in runs}) != len(runs):
+        parser.error("history run IDs must be unique")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    write_json_atomic(args.output, build_results(runs))
+    base["runs"] = runs
+    if args.step_run or args.append_to:
+        payload = json.dumps(base, indent=2, allow_nan=False)
+        with args.output.open("x", encoding="utf-8") as output:
+            output.write(payload)
+    else:
+        write_json_atomic(args.output, base)
     print(f"Wrote {len(runs)} runs to {args.output}")
 
 
